@@ -30,7 +30,7 @@ func (self *joinCodeGen) genOuterJoin(
 	writer.For(
 		"i%[idx]  = 0; i%[idx] < %[size]; i%[idx]++",
 		map[string]string{
-      "idx": idx,
+			"idx":  idx,
 			"size": ref.Size,
 		},
 	)
