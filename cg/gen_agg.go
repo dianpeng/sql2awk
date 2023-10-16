@@ -1,5 +1,9 @@
 package cg
 
+import (
+	"github.com/dianpeng/sql2awk/plan"
+)
+
 // Aggregation Generation.
 //
 // the aggregation generation is kind of simple, for each variable that requires
@@ -7,21 +11,24 @@ package cg
 // accordingly later on
 
 type aggCodeGen struct {
-	cg *CodeGen
+	cg     *queryCodeGen
+	writer *awkWriter
+}
+
+func (self *aggCodeGen) setWriter(w *awkWriter) {
+	self.writer = w
 }
 
 func (self *aggCodeGen) genCalc(
 	l []plan.AggVar,
 ) error {
 	for idx, expr := range l {
-		if str, err := self.cg.genExpr(expr); err != nil {
-			return err
-		} else {
-			self.writer.Assign(
-				self.writer.LocalN("agg_tmp", idx),
-				str,
-			)
-		}
+		str := self.cg.genExpr(expr.Value)
+		self.writer.Assign(
+			self.writer.LocalN("agg_tmp", idx),
+			str,
+			nil,
+		)
 	}
 	return nil
 }
@@ -31,14 +38,14 @@ func (self *aggCodeGen) genAggMin(
 ) {
 	self.writer.Chunk(
 		`
-  if (%[var] == "") {
-    %[var] = %[tmp];
-  } else if (%[var] > %[tmp]) {
-    %[var] = %[tmp];
-  }
+if (%[var] == "") {
+  %[var] = %[tmp];
+} else if (%[var] > %[tmp]) {
+  %[var] = %[tmp];
+}
 `,
-		map[string]interface{}{
-			"var": self.writer.Var("agg_val", idx),
+		awkWriterCtx{
+			"var": self.writer.GlobalN("agg_val", idx),
 			"tmp": self.writer.LocalN("agg_tmp", idx),
 		},
 	)
@@ -49,14 +56,14 @@ func (self *aggCodeGen) genAggMax(
 ) {
 	self.writer.Chunk(
 		`
-  if (%[var] == "") {
-    %[var] = %[tmp];
-  } else if (%[var] < %[tmp]) {
-    %[var] = %[tmp];
-  }
+if (%[var] == "") {
+  %[var] = %[tmp];
+} else if (%[var] < %[tmp]) {
+  %[var] = %[tmp];
+}
 `,
-		map[string]interface{}{
-			"var": self.writer.Var("agg_val", idx),
+		awkWriterCtx{
+			"var": self.writer.GlobalN("agg_val", idx),
 			"tmp": self.writer.LocalN("agg_tmp", idx),
 		},
 	)
@@ -67,14 +74,14 @@ func (self *aggCodeGen) genaggsum(
 ) {
 	self.writer.Chunk(
 		`
-  if (%[var] == "") {
-    %[var] = (%[tmp]+0.0);
-  } else {
-    %[var] += (%[tmp]+0.0);
-  }
+if (%[var] == "") {
+  %[var] = (%[tmp]+0.0);
+} else {
+  %[var] += (%[tmp]+0.0);
+}
 `,
-		map[string]interface{}{
-			"var": self.writer.Var("agg_val", idx),
+		awkWriterCtx{
+			"var": self.writer.GlobalN("agg_val", idx),
 			"tmp": self.writer.LocalN("agg_tmp", idx),
 		},
 	)
@@ -83,21 +90,22 @@ func (self *aggCodeGen) genaggsum(
 func (self *aggCodeGen) genAggAvg(
 	idx int,
 ) {
-	return self.genaggsum(idx)
+	self.genaggsum(idx)
 }
 
 func (self *aggCodeGen) genAggSum(
 	idx int,
 ) {
-	return self.genaggsum(idx)
+	self.genaggsum(idx)
 }
 
 func (self *aggCodeGen) genAggCount(
 	idx int,
 ) {
 	self.writer.Assign(
-		self.writer.LocalN("agg_val", idx),
-		"agg_count", // agg_count is always been updated internally
+		self.writer.GlobalN("agg_val", idx),
+		self.writer.Global("agg_count"),
+		nil,
 	)
 }
 
@@ -106,22 +114,61 @@ func (self *aggCodeGen) genAggOutput(l []plan.AggVar) {
 		switch v.AggType {
 		case plan.AggMin, plan.AggMax, plan.AggCount, plan.AggSum:
 			self.writer.Assign(
-				cgArrIdx("agg", idx),
-				self.writer.LocalN("agg_val", idx),
+				self.writer.ArrIdxN("agg", idx),
+				self.writer.GlobalN("agg_val", idx),
+				nil,
 			)
 			break
 
 		case plan.AggAvg:
 			self.writer.Assign(
-				cgArrIdx("agg", idx),
-				fmt.Sprintf("(%s+0.0)/agg_count", self.writer.LocalN("agg_val", idx)),
+				self.writer.ArrIdxN("agg", idx),
+				"(%[val]+0.0)/$[g, agg_count]",
+				awkWriterCtx{
+					"val": self.writer.GlobalN("agg_val", idx),
+				},
 			)
 			break
 		}
 	}
 }
 
-func (self *aggCodeGen) genNext(l []plan.AggVar) error {
+func (self *aggCodeGen) genAggCleanup(l []plan.AggVar) {
+	self.writer.Assign(
+		"$[g, agg_count]",
+		"0",
+		nil,
+	)
+	for idx, _ := range l {
+		self.writer.Assign(
+			self.writer.GlobalN("agg_val", idx),
+			"\"\"", // use empty string
+			nil,
+		)
+	}
+}
+
+func (self *aggCodeGen) genNext() error {
+	self.writer.Line(
+		"$[g, agg_count]++;",
+		nil,
+	)
+	// save all the rid to be used during agg_flush.
+	for i := 0; i < self.cg.tsSize(); i++ {
+		self.writer.Assign(
+			self.writer.GlobalN("agg_rid", i),
+			self.writer.RID(i),
+			nil,
+		)
+	}
+
+	agg := self.cg.query.Agg
+	if agg == nil {
+		return nil
+	}
+
+	l := agg.VarList
+
 	if err := self.genCalc(l); err != nil {
 		return err
 	}
@@ -151,21 +198,26 @@ func (self *aggCodeGen) genNext(l []plan.AggVar) error {
 			break
 		}
 	}
+	return nil
 }
 
-func (self *aggCodeGen) genFlush(l []plan.AggVar) error {
-	self.genAggOutput(l)
-	self.writer.Assign(
-		"agg_count",
-		"0",
-	)
-	self.writer.CallPipelineNext(
-		"having",
+func (self *aggCodeGen) genFlush() error {
+	agg := self.cg.query.Agg
+
+	if agg != nil {
+		l := agg.VarList
+		self.genAggOutput(l)
+		self.genAggCleanup(l)
+	}
+
+	self.writer.Call(
+		"having_next",
+		self.writer.GlobalParamList("agg_rid", self.cg.tsSize()),
 	)
 	return nil
 }
 
-func (self *aggCodeGen) genDone(l []plan.AggVar) error {
+func (self *aggCodeGen) genDone() error {
 	self.writer.CallPipelineFlush(
 		"having",
 	)

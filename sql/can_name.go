@@ -9,13 +9,15 @@ const (
 	CanNameGlobal
 	CanNameExpr
 	CanNameTableColumn
+	CanNameName
 )
 
 type CanName struct {
 	TableIndex  int
 	ColumnIndex int
-	Reference   Expr // points to another expression that this name referenced with
-	Type        int  // type of can name
+	Reference   Expr   // points to another expression that this name referenced with
+	Type        int    // type of can name
+	Name        string // specialized usage for early stage filter
 }
 
 func (self *CanName) Set(tidx, cidx int) {
@@ -61,6 +63,13 @@ func (self *CanName) SetRef(ref Expr) {
 		}
 		break
 	}
+}
+
+func (self *CanName) SetName(
+	name string,
+) {
+	self.Type = CanNameName
+	self.Name = name
 }
 
 func (self *CanName) SetGlobal() {

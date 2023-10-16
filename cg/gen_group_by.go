@@ -1,5 +1,10 @@
 package cg
 
+import (
+	"fmt"
+	"strings"
+)
+
 // GroupBy code generation
 // ----------------------------------------------------------------------------
 // The group by phase is materialized as following
@@ -14,16 +19,25 @@ package cg
 // part is group_by_next function, which contains hash table setup part.
 
 type groupByCodeGen struct {
-	cg     *CodeGen
+	cg     *queryCodeGen
 	writer *awkWriter
 	tsSize int // table scan size
 }
 
-func (self *groupByCodeGen) genNext(groupBy *plan.GroupBy) error {
-	for idx, fexpr := range groupBy.VarList {
-		if str, err := self.cg.genExpr(fexpr); err != nil {
-			return err
-		} else {
+func (self *groupByCodeGen) setWriter(w *awkWriter) {
+	self.writer = w
+}
+
+func (self *groupByCodeGen) perItemGroupBy() bool {
+	q := self.cg.query
+	return q.GroupBy == nil && q.Agg == nil
+}
+
+func (self *groupByCodeGen) genNext() error {
+	groupBy := self.cg.query.GroupBy
+	if groupBy != nil {
+		for idx, fexpr := range groupBy.VarList {
+			str := self.cg.genExpr(fexpr)
 			self.writer.Assign(
 				"gb_expr%[idx]",
 				str,
@@ -32,45 +46,55 @@ func (self *groupByCodeGen) genNext(groupBy *plan.GroupBy) error {
 				},
 			)
 		}
-	}
 
-	// perform concatenation of the expression generated, and convert all the
-	// expression to *string*. Otherwise we don't know the type
-	buf := []string{}
-	l := len(groupBy.VarList)
-	for i := 0; i < l; i++ {
-		buf = append(buf, fmt.Sprintf("(gb_expr%d + \"\")", i))
-	}
+		// perform concatenation of the expression generated, and convert all the
+		// expression to *string*. Otherwise we don't know the type
+		buf := []string{}
+		l := len(groupBy.VarList)
+		for i := 0; i < l; i++ {
+			buf = append(buf, fmt.Sprintf("(gb_expr%d\"\")", i))
+		}
 
-	self.writer.Assign(
-		"gb_key",
-		strings.Join(buf, "+"),
-	)
+		self.writer.Assign(
+			"gb_key",
+			strings.Join(buf, " "),
+			nil,
+		)
 
-	// table metadata, ie current count
-	{
-		self.writer.Chunk(
-			`
+		// table metadata, ie current count
+		{
+			self.writer.Chunk(
+				`
 if (group_by[gb_key] == "") {
-  group_by[gb_key]=0;
+  group_by[gb_key]=1;
   idx = 0;
 } else {
   idx = group_by[gb_key];
-  group_by[gb_key]++;"
+  group_by[gb_key]++;
 }
-`,
-			nil,
-		)
-	}
+  `,
+				nil,
+			)
+		}
 
-	// table value
-	{
-		self.writer.Line(
-			fmt.Sprintf(
-				"group_by_index[(gb_key+\":\"+idx)] = %s;",
-				self.columnIndexList(),
-			),
+		// table value
+		{
+			self.writer.Line(
+				"group_by_index[sprintf(\"%s:%d\", gb_key, idx)] = %[value];",
+				awkWriterCtx{
+					"value": self.columnIndexList(),
+				},
+			)
+		}
+	} else {
+		self.writer.CallPipelineNext(
+			"agg",
 		)
+		if self.perItemGroupBy() {
+			self.writer.CallPipelineFlush(
+				"agg",
+			)
+		}
 	}
 
 	return nil
@@ -79,49 +103,62 @@ if (group_by[gb_key] == "") {
 func (self *groupByCodeGen) columnIndexList() string {
 	l := []string{}
 	for i := 0; i < self.tsSize; i++ {
-		l = append(l, fmt.Sprintf("arg%d", i))
+		l = append(l, fmt.Sprintf("rid_%d\"\"", i))
 	}
-	return strings.Join(l, "+ \",\"")
+	return strings.Join(l, "\",\"")
 }
 
 // ----------------------------------------------------------------------------
 // the flush part of the group by is essentially, just walk through group_by
 // table and use the value to decide how to index back into group_by_index table
 func (self *groupByCodeGen) genFlush() error {
-	self.writer.Chunk(
-		`
+	groupBy := self.cg.query.GroupBy
+	if groupBy != nil {
+
+		self.writer.Chunk(
+			`
 for (gb_key_tt in group_by) {
-  tt = group_by[gb_key_tt];    # must be a number
-  for (i = 0; i < tt; i++) {   # inner loop to go through all the groupped columns
-    key = gb_key_tt + ":" + i; # get the key
-    val = group_by_index[key]; # get the ',' delimited column size
-    split(val, sep, ",");      # split the ',' into list of column index
-`,
-		nil,
-	)
+  tt = group_by[gb_key_tt];               # must be a number
+  for (i = 0; i < tt; i++) {              # inner loop
+    key = sprintf("%s:%d", gb_key_tt, i); # get the key
+    val = group_by_index[key];            # get the ',' delimited column size
+    split(val, sep, ",");                 # split the ',' into list of column index
+  `,
+			nil,
+		)
 
-	// agg_next's argument is access of *sep* array
-	arg := []string{}
-	for i := 0; i < self.tsSize; i++ {
-		arg = append(arg, fmt.Sprintf("sep[%d]", i))
-	}
+		// agg_next's argument is access of *sep* array
+		arg := []string{}
+		for i := 0; i < self.tsSize; i++ {
+			// separater's index starts with 1, funny
+			arg = append(arg, fmt.Sprintf("sep[%d]", i+1))
+		}
 
-	self.writer.CallPipelineNext(
-		"agg",
-	)
+		self.writer.Call(
+			"agg_next",
+			arg,
+		)
 
-	self.writer.Chunk(
-		`
+		self.writer.Chunk(
+			`
   }
   agg_flush();
 }
-`,
-		nil,
-	)
+  `,
+			nil,
+		)
+	} else if !self.perItemGroupBy() {
+		self.writer.CallPipelineFlush(
+			"agg",
+		)
+	}
 
+	return nil
+}
+
+func (self *groupByCodeGen) genDone() error {
 	self.writer.CallPipelineDone(
 		"agg",
 	)
-
 	return nil
 }

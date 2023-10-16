@@ -113,7 +113,9 @@ type earlyFilterAnalyzer struct {
 
 func (self *earlyFilterAnalyzer) run() sql.Expr {
 	self.anaExpr(self.input)
-	return self.prune()
+	expr := self.prune()
+	self.resetCanName(expr)
+	return expr
 }
 
 func (self *earlyFilterAnalyzer) doToStatus(expr sql.Expr) int {
@@ -224,4 +226,67 @@ func (self *earlyFilterAnalyzer) prune() sql.Expr {
 	}
 
 	return cond
+}
+
+func (self *earlyFilterAnalyzer) resetCanNameRef(
+	x *sql.Ref,
+) {
+	x.CanName.SetName(x.Id)
+}
+
+func (self *earlyFilterAnalyzer) resetCanNamePrimary(
+	x *sql.Primary,
+) {
+	if x.CanName.IsTableColumn() {
+		x.CanName.SetName(x.Suffix[0].Component)
+	}
+
+	for _, suff := range x.Suffix {
+		self.resetCanName(suff)
+	}
+}
+
+func (self *earlyFilterAnalyzer) resetCanName(
+	x sql.Expr,
+) {
+	if x == nil {
+		return
+	}
+	switch x.Type() {
+	default:
+		break
+	case sql.ExprRef:
+		self.resetCanNameRef(x.(*sql.Ref))
+		break
+	case sql.ExprPrimary:
+		self.resetCanNamePrimary(x.(*sql.Primary))
+		break
+	case sql.ExprSuffix:
+		suff := x.(*sql.Suffix)
+		switch suff.Ty {
+		case sql.SuffixCall:
+			for _, xx := range suff.Call.Parameters {
+				self.resetCanName(xx)
+			}
+			break
+		case sql.SuffixIndex:
+			self.resetCanName(suff.Index)
+			break
+		default:
+			break
+		}
+		break
+	case sql.ExprUnary:
+		self.resetCanName(x.(*sql.Unary).Operand)
+		break
+	case sql.ExprBinary:
+		self.resetCanName(x.(*sql.Binary).L)
+		self.resetCanName(x.(*sql.Binary).R)
+		break
+	case sql.ExprTernary:
+		self.resetCanName(x.(*sql.Ternary).Cond)
+		self.resetCanName(x.(*sql.Ternary).B0)
+		self.resetCanName(x.(*sql.Ternary).B1)
+		break
+	}
 }

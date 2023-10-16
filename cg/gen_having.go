@@ -2,36 +2,42 @@ package cg
 
 // Having phase generation
 type havingCodeGen struct {
-	cg     *CodeGen
+	cg     *queryCodeGen
 	writer *awkWriter
 }
 
+func (self *havingCodeGen) setWriter(w *awkWriter) {
+	self.writer = w
+}
+
 // having is easy, just add a filter that's it
-func (self *havingCodeGen) genNext(having *plan.Having) error {
-	if fexpr, err := self.cg.genExpr(having.Filter); err != nil {
-		return err
-	} else {
+func (self *havingCodeGen) genNext() error {
+	having := self.cg.query.Having
+	if having != nil {
+		having := self.cg.query.Having
+		fexpr := self.cg.genExpr(having.Filter)
 		self.writer.Chunk(
 			"if (!(%[filter])) return;",
-			map[string]interface{}{
+			awkWriterCtx{
 				"filter": fexpr,
 			},
 		)
-		self.writer.CallPipelineNext(
-			"output",
-		)
-		return nil
 	}
-}
 
-func (self *havingCodeGen) genFlush(having *plan.Having) error {
 	self.writer.CallPipelineNext(
 		"output",
 	)
 	return nil
 }
 
-func (self *havingCodeGen) genDone(having *plan.Having) error {
+func (self *havingCodeGen) genFlush() error {
+	self.writer.CallPipelineFlush(
+		"output",
+	)
+	return nil
+}
+
+func (self *havingCodeGen) genDone() error {
 	self.writer.CallPipelineDone(
 		"output",
 	)

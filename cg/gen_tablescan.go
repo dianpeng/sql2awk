@@ -3,47 +3,55 @@ package cg
 import (
 	"github.com/dianpeng/sql2awk/plan"
 	"strings"
+	"text/template"
 )
 
 type tableScanGenRef struct {
-	Table string
 	Size  string
+	Field string
+	Table string
 }
 
 type tableScanGen struct {
+	cg  *queryCodeGen
 	Ref []tableScanGenRef
 }
 
 const tableScanTemplate = `
-if (FILENAME == {{.Filename}}) {
-  row_idx = {{.VarTableLength}};
-  {{.VarTableLength}}++;
-
-  field_count_tt = NF;
-  {{if not .FullColumn }}
-    field_count_tt = {{.MaxColumn}} < NF ? {{.MaxColumn}} : NF;
-  {{end}}
-
-  for (i = 0; i < field_count_tt; i++) {
-    {{if .Filter != ""}}
-    if (!({{.Filter}})) continue;
+  if (FILENAME == "{{.Filename}}") {
+    {{if ne .Filter ""}}
+    if (!({{.Filter}})) next;
     {{end}}
-
-    {{.VarTable}}[row_idx] = $i;
+    row_idx = {{.VarTableLength}};
+    {{.VarTableLength}}++;
+    field_count_tt = NF;
+    {{if not .FullColumn }}
+    field_count_tt = {{.MaxColumn}} < NF ? {{.MaxColumn}} : NF;
+    {{end}}
+    {{.VarTableField}} = field_count_tt;
+    for (i = 1; i <= field_count_tt; i++) {
+      {{.VarTable}}[row_idx, i] = $i;
+    }
+    next;
   }
-  next;
-}
+
 `
 
+func newTemplate(
+	xx string,
+) (*template.Template, error) {
+	return template.New("[template]").Parse(xx)
+}
+
 func (self *tableScanGen) genOne(
-	ts *sql.TableScan,
-) (string, error) {
-	filter, err := self.cg.genExpr(ts.Filter)
-	if err != nil {
-		return "", err
+	ts *plan.TableScan,
+) string {
+	filter := ""
+	if ts.Filter != nil {
+		filter = self.cg.genExpr(ts.Filter)
 	}
 
-	t, err := createTextTemplate(
+	t, err := newTemplate(
 		tableScanTemplate,
 	)
 	if err != nil {
@@ -52,8 +60,9 @@ func (self *tableScanGen) genOne(
 
 	out := &strings.Builder{}
 	x := tableScanGenRef{
-		Table: cfVarF("tbl", ts.Table.Index),
-		Size:  cfVarF("tblsize", ts.Table.Index),
+		Table: self.cg.varTable(ts.Table.Index),
+		Field: self.cg.varTableField(ts.Table.Index),
+		Size:  self.cg.varTableSize(ts.Table.Index),
 	}
 	self.Ref = append(self.Ref, x)
 
@@ -64,22 +73,20 @@ func (self *tableScanGen) genOne(
 		"Filter":         filter,
 		"VarTable":       x.Table,
 		"VarTableLength": x.Size,
+		"VarTableField":  x.Field,
 	}); err != nil {
-		return "", err
+		panic(err.Error())
 	}
-	return out.String(), nil
+	return out.String()
 }
 
-func (self *tableScanGen) Gen(
+func (self *tableScanGen) gen(
 	p *plan.Plan,
-) (string, error) {
+) string {
 	buf := &strings.Builder{}
 	for _, ts := range p.TableScan {
-		if data, err := self.genOne(ts); err != nil {
-			return "", err
-		} else {
-			buf.WriteString(data)
-		}
+		data := self.genOne(ts)
+		buf.WriteString(data)
 	}
-	return buf.String(), nil
+	return buf.String()
 }

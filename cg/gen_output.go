@@ -1,24 +1,91 @@
 package cg
 
+import (
+	"fmt"
+	"github.com/dianpeng/sql2awk/plan"
+	"github.com/dianpeng/sql2awk/sql"
+	"strings"
+)
+
 func generateSortOutput(
-	cg *CodeGen,
+	cg *queryCodeGen,
 	writer *awkWriter,
 	sortList []sql.Expr,
 ) error {
 	for _, x := range sortList {
-		if expr, err := cg.genExpr(x); err != nil {
-			return err
-		} else {
-			writer.Line(
-				"printf \"%s%[sep]\",(%[value])",
-				map[string]interface{}{
-					"sep":   cg.OutputSeparator,
-					"value": expr,
-				},
-			)
-		}
+		expr := cg.genExpr(x)
+		writer.Line(
+			"printf \"%s%[sep]\",(%[value])",
+			awkWriterCtx{
+				"sep":   cg.OutputSeparator,
+				"value": expr,
+			},
+		)
 	}
 	return nil
+}
+
+func generateOutputPrologue(
+	cg *queryCodeGen,
+	writer *awkWriter,
+) {
+	writer.Line("$[g, output_count]++;", nil)
+}
+
+type outputCodeGen struct {
+	cg       *queryCodeGen
+	wildcard outputCodeGenWildcard
+	normal   outputCodeGenNormal
+}
+
+func newOutputCodeGen(
+	cg *queryCodeGen,
+) *outputCodeGen {
+	return &outputCodeGen{
+		cg: cg,
+		wildcard: outputCodeGenWildcard{
+			cg: cg,
+		},
+		normal: outputCodeGenNormal{
+			cg: cg,
+		},
+	}
+}
+
+func (self *outputCodeGen) isWildcard() bool {
+	return self.cg.query.Output.Wildcard
+}
+
+func (self *outputCodeGen) setWriter(w *awkWriter) {
+	if self.isWildcard() {
+		self.wildcard.writer = w
+	} else {
+		self.normal.writer = w
+	}
+}
+
+func (self *outputCodeGen) genNext() error {
+	if self.isWildcard() {
+		return self.wildcard.genNext(self.cg.query.Output)
+	} else {
+		return self.normal.genNext(self.cg.query.Output)
+	}
+}
+
+func (self *outputCodeGen) genFlush() error {
+	if self.isWildcard() {
+		return self.wildcard.genFlush()
+	} else {
+		return self.normal.genFlush()
+	}
+}
+
+func (self *outputCodeGen) genDone() error {
+	if self.isWildcard() {
+		return self.wildcard.genDone()
+	} else {
+		return self.normal.genDone()
+	}
 }
 
 /* ------------------------------------------------------------------------
@@ -26,24 +93,25 @@ func generateSortOutput(
  * ----------------------------------------------------------------------*/
 
 type outputCodeGenWildcard struct {
-	cg     *CodeGen
+	cg     *queryCodeGen
 	writer *awkWriter
 }
 
 func (self *outputCodeGenWildcard) genVarOutput(plan *plan.Output) error {
-	p := self.cg.p
+	p := self.cg.query
 
 	for _, ts := range p.TableScan {
 		self.writer.Chunk(
 			`
-for (i = 0; i < %[table_size]; i++) {
-  printf "%s%[sep]",%[table][i]
+for (i = 1; i <= %[table_size]; i++) {
+  printf "%s%[sep]",%[table][%[rid], i]
 }
 `,
-			map[string]interface{}{
+			awkWriterCtx{
 				"table":      self.cg.varTable(ts.Table.Index),
-				"table_size": self.cg.varTableSize(ts.Table.Index),
-				"sep":        self.cg.OutputSeperator,
+				"table_size": self.cg.varTableField(ts.Table.Index),
+				"rid":        self.cg.varRID(ts.Table.Index),
+				"sep":        self.cg.OutputSeparator,
 			},
 		)
 	}
@@ -51,11 +119,11 @@ for (i = 0; i < %[table_size]; i++) {
 }
 
 func (self *outputCodeGenWildcard) genSortOutput(output *plan.Output) error {
-	return generateSortOutput(plan.SortList)
+	return generateSortOutput(self.cg, self.writer, output.SortList)
 }
 
 func (self *outputCodeGenWildcard) genOutput(output *plan.Output) error {
-	self.writer.Line("output_count++;")
+	generateOutputPrologue(self.cg, self.writer)
 
 	if err := self.genVarOutput(output); err != nil {
 		return err
@@ -63,33 +131,32 @@ func (self *outputCodeGenWildcard) genOutput(output *plan.Output) error {
 	if err := self.genSortOutput(output); err != nil {
 		return err
 	}
-	self.writer.Line("print \"\"")
+	self.writer.Line("print \"\"", nil)
 	return nil
 }
 
 // distinct for wildcard, easy just setup a distinct table
 func (self *outputCodeGenWildcard) genDistinct(output *plan.Output) error {
-	if output.Distinct {
+	if !output.Distinct {
 		return nil
 	}
 
-	p := self.cg.p
+	p := self.cg.query
 
 	self.writer.DefineLocal(
 		"distinct_key",
-		"\"\"",
 	)
 	for _, ts := range p.TableScan {
 		self.writer.Chunk(
 			`
 for (i = 0; i < %[table_size]; i++) {
-  distinct_key += (%[table][i]+'')
+  distinct_key += %[table][i]"";
 }
 `,
-			map[string]interface{}{
+			awkWriterCtx{
 				"table":      self.cg.varTable(ts.Table.Index),
 				"table_size": self.cg.varTableSize(ts.Table.Index),
-				"sep":        self.cg.OutputSeperator,
+				"sep":        self.cg.OutputSeparator,
 			},
 		)
 	}
@@ -105,6 +172,7 @@ for (i = 0; i < %[table_size]; i++) {
 `,
 		nil,
 	)
+	return nil
 }
 
 func (self *outputCodeGenWildcard) genLimit(output *plan.Output) error {
@@ -114,11 +182,11 @@ func (self *outputCodeGenWildcard) genLimit(output *plan.Output) error {
 
 	self.writer.Chunk(
 		`
-if (output_count >= %[limit]) {
+if ($[g, output_count] >= %[limit]) {
   return;
 }
 `,
-		map[string]interface{}{
+		awkWriterCtx{
 			"limit": output.Limit,
 		},
 	)
@@ -151,7 +219,7 @@ func (self *outputCodeGenWildcard) genDone() error {
  * ----------------------------------------------------------------------*/
 
 type outputCodeGenNormal struct {
-	cg     *CodeGen
+	cg     *queryCodeGen
 	writer *awkWriter
 }
 
@@ -170,11 +238,11 @@ func (self *outputCodeGenNormal) genLimit(
 	}
 	self.writer.Chunk(
 		`
-if (output_count >= %[limit]) {
+if ($[g, output_count] >= %[limit]) {
   return;
 }
 `,
-		map[string]interface{}{
+		awkWriterCtx{
 			"limit": output.Limit,
 		},
 	)
@@ -185,14 +253,12 @@ func (self *outputCodeGenNormal) genCalc(
 	output *plan.Output,
 ) {
 	for idx, expr := range output.VarList {
-		if xx, err := self.cg.genExpr(expr); err != nil {
-			return err
-		} else {
-			self.writer.Assign(
-				self.writer.LocalN("output_val", idx),
-				fmt.Sprintf("(%s+\"\")", xx),
-			)
-		}
+		xx := self.cg.genExpr(expr)
+		self.writer.Assign(
+			self.writer.LocalN("output_val", idx),
+			fmt.Sprintf("(%s\"\")", xx),
+			nil,
+		)
 	}
 }
 
@@ -207,21 +273,25 @@ func (self *outputCodeGenNormal) outputLocalList(output *plan.Output) []string {
 func (self *outputCodeGenNormal) genDistinct(
 	output *plan.Output,
 ) error {
+	if !output.Distinct {
+		return nil
+	}
 	x := self.outputLocalList(output)
 
 	self.writer.Assign(
 		"distinct_key",
 		strings.Join(x, "+"),
+		nil,
 	)
 
 	// okay, now use the distinct key to check distinct table
 	self.writer.Chunk(
 		`
-  if (distinct[distinct_key] == "") {
-    distinct[distinct_key] = "Y";
-  } else {
-    return;
-  }
+if (distinct[distinct_key] == "") {
+  distinct[distinct_key] = "Y";
+} else {
+  return;
+}
 `,
 		nil,
 	)
@@ -231,16 +301,19 @@ func (self *outputCodeGenNormal) genDistinct(
 func (self *outputCodeGenNormal) genVarOutput(
 	output *plan.Output,
 ) error {
-	self.writer.LineStart("printf \"")
-	for idx, _ := range output.VarList {
-		self.writer.O("%s")
-		self.writer.O(self.cg.OutputSeparator)
+	self.writer.oIndent()
+	self.writer.o("printf \"")
+	for _, _ = range output.VarList {
+		self.writer.o("%s")
+		self.writer.o(self.cg.OutputSeparator)
 	}
-	self.writer.O("\",")
+	self.writer.o("\",")
 
 	x := self.outputLocalList(output)
-	self.writer.O(strings.Join(x, ","))
-	self.writer.LineDone(";")
+	self.writer.o(strings.Join(x, ","))
+	self.writer.o(";")
+	self.writer.oLB()
+	return nil
 }
 
 func (self *outputCodeGenNormal) genSortOutput(
@@ -253,17 +326,19 @@ func (self *outputCodeGenNormal) genSortOutput(
 	)
 }
 
-func (self *outputCodeGenNormal) genSortOutput(
+func (self *outputCodeGenNormal) genOutput(
 	output *plan.Output,
 ) error {
-	self.writer.Line("output_count++;")
+	generateOutputPrologue(self.cg, self.writer)
+
+	self.genCalc(output)
 	if err := self.genVarOutput(output); err != nil {
 		return err
 	}
 	if err := self.genSortOutput(output); err != nil {
 		return err
 	}
-	self.writer.Line("print \"\"")
+	self.writer.Line("print \"\"", nil)
 	return nil
 }
 

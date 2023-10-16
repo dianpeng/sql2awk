@@ -142,6 +142,82 @@ select t1.$1 as f1,
 from tab("/a/b/1") as t1,
      tab("/a/b/2") as t2
 
+where (f1 == f2)
+`,
+		)
+		assert.True(s != nil)
+		p := newPlan()
+		err := p.resolveSymbol(s) // this is required
+		assert.True(err == nil)
+
+		cond := s.Where.Condition
+		info := newExprTableAccessInfo(cond)
+		{
+			ef := p.anaEarlyFilter(
+				0,
+				info,
+				cond,
+			)
+			assert.True(ef == nil)
+		}
+
+		{
+			ef := p.anaEarlyFilter(
+				1,
+				info,
+				cond,
+			)
+			assert.True(ef == nil)
+		}
+	}
+
+	{
+		s := compAST(
+			`
+select t1.$1 as f1,
+       t2.$2 as f2
+
+from tab("/a/b/1") as t1,
+     tab("/a/b/2") as t2
+
+where (t1.$1 == t2.$2)
+`,
+		)
+		assert.True(s != nil)
+		p := newPlan()
+		err := p.resolveSymbol(s) // this is required
+		assert.True(err == nil)
+
+		cond := s.Where.Condition
+		info := newExprTableAccessInfo(cond)
+		{
+			ef := p.anaEarlyFilter(
+				0,
+				info,
+				cond,
+			)
+			assert.True(ef == nil)
+		}
+
+		{
+			ef := p.anaEarlyFilter(
+				1,
+				info,
+				cond,
+			)
+			assert.True(ef == nil)
+		}
+	}
+
+	{
+		s := compAST(
+			`
+select t1.$1 as f1,
+       t2.$2 as f2
+
+from tab("/a/b/1") as t1,
+     tab("/a/b/2") as t2
+
 where (f1 == 100 && f2 == f1)
 `,
 		)

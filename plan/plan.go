@@ -166,6 +166,12 @@ func newPlan() *Plan {
 	}
 }
 
+func PlanCode(c *sql.Code) *Plan {
+	p := newPlan()
+	p.plan(c.Select)
+	return p
+}
+
 func isVTableIndex(x int) bool { return x < 0 }
 func isRTableIndex(x int) bool { return x >= 0 }
 

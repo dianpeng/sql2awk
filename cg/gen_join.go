@@ -1,5 +1,10 @@
 package cg
 
+import (
+	"fmt"
+	"github.com/dianpeng/sql2awk/plan"
+)
+
 // ----------------------------------------------------------------------------
 // Join function body's code generation. The skeleton of the join body is
 // as following:
@@ -17,8 +22,7 @@ package cg
 // group_by_done();  // join is done
 
 type joinCodeGen struct {
-	cg      *CodeGen
-	maxJoin int
+	cg *queryCodeGen
 }
 
 func (self *joinCodeGen) genOuterJoin(
@@ -28,14 +32,30 @@ func (self *joinCodeGen) genOuterJoin(
 	writer *awkWriter,
 ) {
 	writer.For(
-		"i%[idx]  = 0; i%[idx] < %[size]; i%[idx]++",
-		map[string]string{
+		"rid_%[idx]  = 0; rid_%[idx] < %[size]; rid_%[idx]++",
+		awkWriterCtx{
 			"idx":  idx,
 			"size": ref.Size,
 		},
 	)
 
-	writer.EndFor()
+	if (idx + 1) < self.cg.tsSize()-1 {
+		self.genOuterJoin(
+			idx+1,
+			j,
+			&self.cg.tsRef[idx+1],
+			writer,
+		)
+	} else {
+		self.genInnerJoin(
+			idx+1,
+			j,
+			&self.cg.tsRef[idx+1],
+			writer,
+		)
+	}
+
+	writer.ForEnd()
 }
 
 func (self *joinCodeGen) genInnerJoin(
@@ -44,22 +64,28 @@ func (self *joinCodeGen) genInnerJoin(
 	ref *tableScanGenRef,
 	writer *awkWriter,
 ) {
+	writer.DefineGlobal("join_size")
+
 	writer.For(
-		"#i[Idx] = 0; #i[Idx] < %[Size]; #i[Idx]++",
-		map[string]string{
-			"Size": ref.Size,
+		"rid_%[idx] = 0; rid_%[idx] < %[size]; rid_%[idx]++",
+		awkWriterCtx{
+			"idx":  idx,
+			"size": ref.Size,
 		},
 	)
 
+	writer.Line(
+		"$[g, join_size]++;",
+		nil,
+	)
+
 	// filter of join, if any, otherwise just do nothing at all
-	if filter := j.Filter(); filter != nil {
-		if fStr, err := self.cg.genExpr(filter); err != nil {
-			return err
-		}
+	if filter := j.JoinFilter(); filter != nil {
 		writer.Line(
-			"if (!%[Filter]) continue;",
-			map[string]string{
-				"Filter": fStr,
+			"if (!%[filter]) continue;",
+
+			awkWriterCtx{
+				"filter": self.cg.genExpr(filter),
 			},
 		)
 	}
@@ -67,17 +93,51 @@ func (self *joinCodeGen) genInnerJoin(
 	// invoke nest phase, which is *group_by*
 	writer.Call(
 		"group_by_next",
-		self.loopInductionVariableList(idx+1),
+		self.loopInductionVariableList(),
 	)
 
 	// end the inner most for
-	writer.EndFor()
+	writer.ForEnd()
+}
+
+func (self *joinCodeGen) genJoin(writer *awkWriter) {
+	nIdx := 0
+	j := self.cg.query.Join
+	ref := &self.cg.tsRef[nIdx]
+	tsSize := self.cg.tsSize()
+
+	if nIdx < tsSize-1 {
+		self.genOuterJoin(
+			nIdx,
+			j,
+			ref,
+			writer,
+		)
+	} else {
+		self.genInnerJoin(
+			nIdx,
+			j,
+			ref,
+			writer,
+		)
+	}
+
+	writer.Chunk(
+		`
+if ($[g, join_size] > 0) {
+  @[pipeline_flush, %(group_by)];
+  @[pipeline_done, %(group_by)];
+}
+  `,
+		nil,
+	)
 }
 
 func (self *joinCodeGen) loopInductionVariableList() []string {
 	out := []string{}
-	for i := 0; i < self.maxJoin; i++ {
-		out = append(out, fmt.Sprintf("i%d", i))
+	maxJoin := self.cg.tsSize()
+	for i := 0; i < maxJoin; i++ {
+		out = append(out, fmt.Sprintf("rid_%d", i))
 	}
 	return out
 }

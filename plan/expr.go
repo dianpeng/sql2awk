@@ -186,16 +186,21 @@ func (self *exprTableAccessInfo) markSuffix(
 func (self *exprTableAccessInfo) markPrimary(
 	primary *sql.Primary,
 ) {
-	self.mark(primary.Leading)
-	for _, x := range primary.Suffix {
-		self.markSuffix(x)
-	}
+	if primary.CanName.IsTableColumn() {
+		set := self.s(primary)
+		set[primary.CanName.TableIndex] = true
+	} else {
+		self.mark(primary.Leading)
+		for _, x := range primary.Suffix {
+			self.markSuffix(x)
+		}
 
-	set := self.s(primary)
+		set := self.s(primary)
 
-	self.include(set, self.s(primary.Leading))
-	for _, x := range primary.Suffix {
-		self.include(set, self.s(x))
+		self.include(set, self.s(primary.Leading))
+		for _, x := range primary.Suffix {
+			self.include(set, self.s(x))
+		}
 	}
 }
 

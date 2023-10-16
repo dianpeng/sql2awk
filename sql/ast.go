@@ -96,6 +96,15 @@ type Projection struct {
 	ValueList []SelectVar
 }
 
+func (self *Projection) HasWildcard() bool {
+	for _, y := range self.ValueList {
+		if y.Type() == SelectVarStar {
+			return true
+		}
+	}
+	return false
+}
+
 type ColName struct {
 	Table   string
 	Name    string
