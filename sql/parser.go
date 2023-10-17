@@ -324,7 +324,7 @@ func (self *Parser) parseSqlList(
 }
 
 func (self *Parser) parseProjection() (*Projection, error) {
-	x := []SelectVar{}
+	x := SelectVarList{}
 	start := self.posStart()
 
 	if err := self.parseSqlList(
@@ -332,6 +332,9 @@ func (self *Parser) parseProjection() (*Projection, error) {
 			if n, err := self.parseProjectionVar(idx); err != nil {
 				return err
 			} else {
+				if x.HasWildcard() {
+					return self.err("duplicated */wildcard specified")
+				}
 				x = append(x, n)
 			}
 			return nil

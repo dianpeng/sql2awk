@@ -84,8 +84,8 @@ func (self *outputCodeGenWildcard) genVarOutput(plan *plan.Output) error {
 	for _, ts := range p.TableScan {
 		self.writer.Chunk(
 			`
-for (i = 1; i <= %[table_size]; i++) {
-  printf "%s%[sep]",%[table][%[rid], i]
+for ($[l, i] = 1; $[l, i] <= %[table_size]; $[l, i]++) {
+  printf "%s%[sep]",%[table][%[rid], $[l, i]]
 }
 `,
 			awkWriterCtx{
@@ -123,13 +123,14 @@ func (self *outputCodeGenWildcard) genDistinct(output *plan.Output) error {
 	for _, ts := range p.TableScan {
 		self.writer.Chunk(
 			`
-for (i = 0; i < %[table_size]; i++) {
-  distinct_key = sprintf("%s%s", distinct_key, %[table][i]);
+for ($[l, i] = 1; $[l, i] <= %[table_size]; $[l, i]++) {
+  $[l, distinct_key] = sprintf("%s%s", $[l, distinct_key], %[table][%[rid], $[l, i]]);
 }
 `,
 			awkWriterCtx{
 				"table":      self.cg.varTable(ts.Table.Index),
-				"table_size": self.cg.varTableSize(ts.Table.Index),
+				"table_size": self.cg.varTableField(ts.Table.Index),
+				"rid":        self.cg.varRID(ts.Table.Index),
 				"sep":        self.cg.OutputSeparator,
 			},
 		)
@@ -138,8 +139,8 @@ for (i = 0; i < %[table_size]; i++) {
 	// okay, now use the distinct key to check distinct table
 	self.writer.Chunk(
 		`
-  if (distinct[distinct_key] == "") {
-    distinct[distinct_key] = "Y";
+  if ($[ga, distinct][$[l, distinct_key]] == "") {
+    $[ga, distinct][$[l, distinct_key]] = "Y";
   } else {
     return;
   }
@@ -199,6 +200,7 @@ type outputCodeGenNormal struct {
 
 func (self *outputCodeGenNormal) setup(output *plan.Output) {
 	self.writer.DefineLocal("distinct_key")
+
 	for idx, _ := range output.VarList {
 		self.writer.DefineLocalN("output_val", idx)
 	}
@@ -250,19 +252,21 @@ func (self *outputCodeGenNormal) genDistinct(
 	if !output.Distinct {
 		return nil
 	}
-	x := self.outputLocalList(output)
 
-	self.writer.Assign(
-		"distinct_key",
-		strings.Join(x, "+"),
-		nil,
-	)
+	for idx, _ := range output.VarList {
+		self.writer.Line(
+			`$[l, distinct_key] = sprintf("%s%s", $[l, distinct_key], %[oval]);`,
+			awkWriterCtx{
+				"oval": self.writer.LocalN("output_val", idx),
+			},
+		)
+	}
 
 	// okay, now use the distinct key to check distinct table
 	self.writer.Chunk(
 		`
-if (distinct[distinct_key] == "") {
-  distinct[distinct_key] = "Y";
+if ($[ga, distinct][$[l, distinct_key]] == "") {
+  $[ga, distinct][$[l, distinct_key]] = "Y";
 } else {
   return;
 }
@@ -294,8 +298,13 @@ func (self *outputCodeGenNormal) genOutput(
 	output *plan.Output,
 ) error {
 	generateOutputPrologue(self.cg, self.writer)
-
 	self.genCalc(output)
+
+	// distinct must be placed *after* the evaluation
+	if err := self.genDistinct(output); err != nil {
+		return err
+	}
+
 	if err := self.genVarOutput(output); err != nil {
 		return err
 	}
@@ -305,9 +314,6 @@ func (self *outputCodeGenNormal) genOutput(
 
 func (self *outputCodeGenNormal) genNext(output *plan.Output) error {
 	if err := self.genLimit(output); err != nil {
-		return err
-	}
-	if err := self.genDistinct(output); err != nil {
 		return err
 	}
 	if err := self.genOutput(output); err != nil {

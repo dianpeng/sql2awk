@@ -153,6 +153,7 @@ function typeof(obj,   q, x, z) {
 # go's AWK does not support asort
 function asort(a, b, c) {
 }
+
 function asorti(a, b, c) {
 }
 `

@@ -91,18 +91,24 @@ func (self *Star) Index() int      { return 0 }
 func (self *Star) Alias() string   { return "" }
 func (self *Star) ColName() string { return "%0" }
 
+type SelectVarList []SelectVar
+
 type Projection struct {
 	CodeInfo  CodeInfo
-	ValueList []SelectVar
+	ValueList SelectVarList
 }
 
-func (self *Projection) HasWildcard() bool {
-	for _, y := range self.ValueList {
+func (self *SelectVarList) HasWildcard() bool {
+	for _, y := range *self {
 		if y.Type() == SelectVarStar {
 			return true
 		}
 	}
 	return false
+}
+
+func (self *Projection) HasWildcard() bool {
+	return self.ValueList.HasWildcard()
 }
 
 type ColName struct {

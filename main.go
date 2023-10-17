@@ -10,7 +10,7 @@ import (
 )
 
 func oops(stage string, err error) {
-	fmt.Fprintf(os.Stderr, "[%s]: %s", stage, err)
+	fmt.Fprintf(os.Stderr, "ERROR [%s]]] %s\n", stage, err)
 	os.Exit(-1)
 }
 
@@ -29,10 +29,12 @@ func main() {
 	if err != nil {
 		oops("parse", err)
 	}
-	p := plan.PlanCode(code)
+
+	p, err := plan.PlanCode(code)
 	if err != nil {
 		oops("plan", err)
 	}
+
 	awkCode, err := cg.Generate(
 		p,
 		&cg.Config{

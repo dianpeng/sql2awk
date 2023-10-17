@@ -5,12 +5,15 @@ import (
 	"math"
 )
 
-func (self *Plan) planPrepare(s *sql.Select) {
+func (self *Plan) planPrepare(s *sql.Select) error {
 	// 1) resolve all the symbols and resolve all the alias
-	self.resolveSymbol(s)
+	if err := self.resolveSymbol(s); err != nil {
+		return err
+	}
 
 	// 2) analyze aggregation
 	self.anaAgg(s)
+	return nil
 }
 
 // ----------------------------------------------------------------------------
@@ -175,8 +178,10 @@ func (self *Plan) planSort(s *sql.Select) {
 	}
 }
 
-func (self *Plan) plan(s *sql.Select) {
-	self.planPrepare(s)
+func (self *Plan) plan(s *sql.Select) error {
+	if err := self.planPrepare(s); err != nil {
+		return err
+	}
 	self.planTableScan(s)
 	self.planJoin(s)
 	self.planGroupBy(s)
@@ -184,4 +189,5 @@ func (self *Plan) plan(s *sql.Select) {
 	self.planHaving(s)
 	self.planSort(s)
 	self.planOutput(s)
+	return nil
 }

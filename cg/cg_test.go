@@ -330,7 +330,11 @@ func (self *cookbook) genAwk() error {
 	if yy.attrAt("goawk") == "disable" {
 		useGoAWK = false
 	}
-	p := plan.PlanCode(c)
+	p, err := plan.PlanCode(c)
+	if err != nil {
+		return fmt.Errorf("[plan]: %s", err)
+	}
+
 	code, err := Generate(p, &Config{
 		OutputSeparator: " ",
 		UseGoAWK:        useGoAWK,

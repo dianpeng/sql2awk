@@ -226,10 +226,12 @@ func newPlan() *Plan {
 	}
 }
 
-func PlanCode(c *sql.Code) *Plan {
+func PlanCode(c *sql.Code) (*Plan, error) {
 	p := newPlan()
-	p.plan(c.Select)
-	return p
+	if err := p.plan(c.Select); err != nil {
+		return nil, err
+	}
+	return p, nil
 }
 
 func isVTableIndex(x int) bool { return x < 0 }
