@@ -82,7 +82,7 @@ if (group_by[gb_key] == "") {
 			self.writer.Line(
 				"group_by_index[sprintf(\"%s:%d\", gb_key, idx)] = %[value];",
 				awkWriterCtx{
-					"value": self.columnIndexList(),
+					"value": self.writer.ridCommaList(self.cg.tsSize()),
 				},
 			)
 		}
@@ -98,14 +98,6 @@ if (group_by[gb_key] == "") {
 	}
 
 	return nil
-}
-
-func (self *groupByCodeGen) columnIndexList() string {
-	l := []string{}
-	for i := 0; i < self.tsSize; i++ {
-		l = append(l, fmt.Sprintf("rid_%d\"\"", i))
-	}
-	return strings.Join(l, "\",\"")
 }
 
 // ----------------------------------------------------------------------------

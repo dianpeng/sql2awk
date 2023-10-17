@@ -284,3 +284,12 @@ func (self *exprCodeGen) genSubExpr(
 	self.genExpr(expr)
 	self.o.WriteString(")")
 }
+
+func (self *exprCodeGen) genExprAsStr(
+	expr sql.Expr,
+) {
+	self.o.WriteString("(")
+	self.genSubExpr(expr)
+	self.o.WriteString("\"\"")
+	self.o.WriteString(")")
+}

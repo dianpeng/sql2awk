@@ -69,9 +69,9 @@ func (self *Plan) anaAgg(
 // CanName field.
 func (self *Plan) isAggFunc(
 	p *sql.Primary,
-) (int, sql.Expr, error) {
+) (int, sql.Expr, sql.Expr, error) {
 	if p.Leading.Type() != sql.ExprRef {
-		return -1, nil, nil
+		return -1, nil, nil, nil
 	}
 	ty := -1
 
@@ -96,17 +96,30 @@ func (self *Plan) isAggFunc(
 		ty = AggCount
 		break
 
+	case "percentile":
+		ty = AggPercentile
+		break
+
 	default:
-		return -1, nil, nil
+		return -1, nil, nil, nil
 	}
 
 	// now check arity of parameters, if arity does not match, we do not treat
 	// them *as* aggregation function either
 	if len(p.Suffix) != 1 {
-		return -1, nil, self.err("agg", "invalid arity for aggregation function")
+		return -1, nil, nil, self.err("agg", "invalid arity for aggregation function")
+	}
+	if p.Suffix[0].Ty != sql.SuffixCall {
+		return -1, nil, nil, self.err("agg", "aggregation must be function call")
+	}
+	if len(p.Suffix[0].Call.Parameters) == 0 {
+		return -1, nil, nil, self.err(
+			"agg",
+			"aggregation function must have at least one parameters",
+		)
 	}
 
-	return ty, p.Suffix[0], nil
+	return ty, p.Suffix[0], p.Suffix[0].Call.Parameters[0], nil
 }
 
 func (self *Plan) anaAggExpr(
@@ -131,7 +144,7 @@ func (self *Plan) anaAggExpr(
 func (self *Plan) anaAggExprPrimary(
 	primary *sql.Primary,
 ) error {
-	ty, inner, err := self.isAggFunc(primary)
+	ty, inner, target, err := self.isAggFunc(primary)
 	if err != nil {
 		return err
 	}
@@ -143,6 +156,7 @@ func (self *Plan) anaAggExprPrimary(
 	avar := AggVar{
 		AggType: ty,
 		Value:   inner,
+		Target:  target,
 	}
 
 	idx := len(self.aggExpr)

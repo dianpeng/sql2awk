@@ -25,21 +25,21 @@ func (self *havingCodeGen) genNext() error {
 	}
 
 	self.writer.CallPipelineNext(
-		"output",
+		"sort",
 	)
 	return nil
 }
 
 func (self *havingCodeGen) genFlush() error {
 	self.writer.CallPipelineFlush(
-		"output",
+		"sort",
 	)
 	return nil
 }
 
 func (self *havingCodeGen) genDone() error {
 	self.writer.CallPipelineDone(
-		"output",
+		"sort",
 	)
 	return nil
 }

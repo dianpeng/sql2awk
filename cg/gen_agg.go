@@ -1,6 +1,7 @@
 package cg
 
 import (
+	"fmt"
 	"github.com/dianpeng/sql2awk/plan"
 )
 
@@ -23,7 +24,7 @@ func (self *aggCodeGen) genCalc(
 	l []plan.AggVar,
 ) error {
 	for idx, expr := range l {
-		str := self.cg.genExpr(expr.Value)
+		str := self.cg.genExpr(expr.Target)
 		self.writer.Assign(
 			self.writer.LocalN("agg_tmp", idx),
 			str,
@@ -109,9 +110,24 @@ func (self *aggCodeGen) genAggCount(
 	)
 }
 
+func (self *aggCodeGen) genAggPercentile(
+	idx int,
+) {
+	self.writer.Line(
+		`%[agg_val][$[g, agg_count]""] = kv_make(order_key(%[agg_tmp]), %[agg_tmp]);`,
+		awkWriterCtx{
+			"agg_val": self.writer.GlobalNArray("agg_val", idx),
+			"agg_tmp": self.writer.LocalN("agg_tmp", idx),
+		},
+	)
+}
+
 func (self *aggCodeGen) genAggOutput(l []plan.AggVar) {
 	for idx, v := range l {
 		switch v.AggType {
+		default:
+			break
+
 		case plan.AggMin, plan.AggMax, plan.AggCount, plan.AggSum:
 			self.writer.Assign(
 				self.writer.ArrIdxN("agg", idx),
@@ -129,6 +145,25 @@ func (self *aggCodeGen) genAggOutput(l []plan.AggVar) {
 				},
 			)
 			break
+
+		case plan.AggPercentile:
+			// percentile has one extra argument to indicate the percentile number
+			// which is a constant number
+			nPercent := 50
+			if v, has := v.ParamInt(1); has && v >= 0 && v <= 100 {
+				nPercent = int(v)
+			}
+
+			// okay, now calls a builtin function to perform percentile calculation
+			self.writer.Assign(
+				self.writer.ArrIdxN("agg", idx),
+				"kv_getv(agg_percentile(%[input], %[n]))",
+				awkWriterCtx{
+					"input": self.writer.GlobalNArray("agg_val", idx),
+					"n":     fmt.Sprintf("%d", nPercent),
+				},
+			)
+			break
 		}
 	}
 }
@@ -140,11 +175,20 @@ func (self *aggCodeGen) genAggCleanup(l []plan.AggVar) {
 		nil,
 	)
 	for idx, _ := range l {
-		self.writer.Assign(
-			self.writer.GlobalN("agg_val", idx),
-			"\"\"", // use empty string
-			nil,
-		)
+		if !self.writer.HasGlobalNArray("agg_val", idx) {
+			self.writer.Assign(
+				self.writer.GlobalN("agg_val", idx),
+				"\"\"", // use empty string
+				nil,
+			)
+		} else {
+			self.writer.Line(
+				"clear_array(%[gvar])",
+				awkWriterCtx{
+					"gvar": self.writer.GlobalN("agg_val", idx),
+				},
+			)
+		}
 	}
 }
 
@@ -157,7 +201,7 @@ func (self *aggCodeGen) genNext() error {
 	for i := 0; i < self.cg.tsSize(); i++ {
 		self.writer.Assign(
 			self.writer.GlobalN("agg_rid", i),
-			self.writer.RID(i),
+			self.writer.rid(i),
 			nil,
 		)
 	}
@@ -192,6 +236,10 @@ func (self *aggCodeGen) genNext() error {
 
 		case plan.AggCount:
 			self.genAggCount(idx)
+			break
+
+		case plan.AggPercentile:
+			self.genAggPercentile(idx)
 			break
 
 		default:

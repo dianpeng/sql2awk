@@ -35,6 +35,7 @@ type cookbook struct {
 	filename string
 	parsed   sectionList
 	input    []string
+	code     string
 	awkProg  *gawkp.Program
 	result   string
 }
@@ -325,33 +326,54 @@ func (self *cookbook) genAwk() error {
 	if err != nil {
 		return fmt.Errorf("[plan]: %s", err)
 	}
+	useGoAWK := true
+	if yy.attrAt("goawk") == "disable" {
+		useGoAWK = false
+	}
 	p := plan.PlanCode(c)
-	code, err := Generate(p)
+	code, err := Generate(p, &Config{
+		OutputSeparator: " ",
+		UseGoAWK:        useGoAWK,
+	})
 	if err != nil {
 		return fmt.Errorf("[plan]: %s", err)
 	}
-	prog, err := gawkp.ParseProgram(
-		[]byte(code),
-		nil,
-	)
-	if err != nil {
-		return fmt.Errorf("[plan]: %s", err)
-	}
-	self.awkProg = prog
+	self.code = code
 	return nil
 }
 
 func (self *cookbook) runAwk() error {
-	buf := strings.Builder{}
-	config := &gawki.Config{
-		Output: &buf,
-		Args:   self.input,
+	if verify := self.parsed.getOne("result"); verify != nil {
+		prog, err := gawkp.ParseProgram(
+			[]byte(self.code),
+			nil,
+		)
+		if err != nil {
+			return fmt.Errorf("[plan]: %s", err)
+		}
+		self.awkProg = prog
+		buf := strings.Builder{}
+		interp, err := gawki.New(self.awkProg)
+		if err != nil {
+			return err
+		}
+		config := &gawki.Config{
+			Output: &buf,
+			Args:   self.input,
+		}
+		_, err = interp.Execute(config)
+		if err != nil {
+			return err
+		}
+		self.result = buf.String()
+	} else if save := self.parsed.getOne("save"); save != nil {
+		if path := save.attrAt("path"); path != "" {
+			return saveToTmp(
+				path,
+				self.code,
+			)
+		}
 	}
-	_, err := gawki.ExecProgram(self.awkProg, config)
-	if err != nil {
-		return err
-	}
-	self.result = buf.String()
 	return nil
 }
 
@@ -433,18 +455,20 @@ func (self *cookbook) cmpOrderList(
 }
 
 func (self *cookbook) verify() error {
-	yy := self.parsed.getOne("result")
-	if yy == nil {
-		return fmt.Errorf("[plan]: result not found")
-	}
-	lhs := self.toOrderList(yy.content)
-	rhs := self.toOrderList(self.result)
-	if err := self.cmpOrderList(lhs, rhs, true); err != nil {
-		return fmt.Errorf("[plan]: expect{\n%s\n}, result{\n%s\n}, failed: %s",
-			yy.content,
-			self.result,
-			err,
-		)
+	if yy := self.parsed.getOne("result"); yy != nil {
+		order := true
+		if v := yy.attrAt("order"); v == "none" {
+			order = false
+		}
+		lhs := self.toOrderList(yy.content)
+		rhs := self.toOrderList(self.result)
+		if err := self.cmpOrderList(lhs, rhs, order); err != nil {
+			return fmt.Errorf("[plan]: expect{\n%s\n}, result{\n%s\n}, failed: %s",
+				yy.content,
+				self.result,
+				err,
+			)
+		}
 	}
 	return nil
 }
@@ -465,7 +489,7 @@ func TestCodeGen(t *testing.T) {
 		}
 		if err := cb.run(); err != nil {
 			print(fmt.Sprintf("cookbook(%s) failed: %s\n", x, err))
-      assert.True(false)
+			assert.True(false)
 		} else {
 			print(fmt.Sprintf("cookbook(%s) passed\n", x))
 		}

@@ -9,9 +9,14 @@ import (
 
 type awkWriterCtx map[string]interface{}
 
+type awkG struct {
+	name  string
+	array bool
+}
+
 type awkGlobalFromFunc struct {
 	funcName string
-	g        []string
+	g        []awkG
 }
 
 // collector used to flush awkWriter's global definition into. Used for us
@@ -47,16 +52,19 @@ func (self *awkGlobal) addG(g *awkGlobalFromFunc) {
 	self.G = append(self.G, g)
 }
 
-func (self *awkGlobal) globalList() []string {
-	out := []string{}
+func (self *awkGlobal) globalList() []awkG {
+	out := []awkG{}
 	idx := make(map[string]bool)
 	for _, x := range self.G {
 		for _, y := range x.g {
-			if idx[y] {
+			if idx[y.name] {
 				continue
 			}
-			idx[y] = true
-			out = append(out, y)
+			idx[y.name] = true
+			out = append(out, awkG{
+				name:  y.name,
+				array: y.array,
+			})
 		}
 	}
 	return out
@@ -182,16 +190,84 @@ func (self *awkWriter) HasGlobal(l string) bool {
 	return ok
 }
 
+func (self *awkWriter) HasGlobalArray(l string) bool {
+	g := self.globalVarName(l, -1)
+	for _, x := range self.g.g {
+		if x.name == g && x.array {
+			return true
+		}
+	}
+	return false
+}
+
+func (self *awkWriter) HasGlobalNArray(l string, n int) bool {
+	g := self.globalVarName(l, n)
+	for _, x := range self.g.g {
+		if x.name == g && x.array {
+			return true
+		}
+	}
+	return false
+}
+
 func (self *awkWriter) HasGlobalN(l string, idx int) bool {
 	g := self.globalVarName(l, idx)
 	_, ok := self.globalIndex[g]
 	return ok
 }
 
+func (self *awkWriter) defineGlobal(
+	n string,
+	isArray bool,
+) string {
+	n = self.globalVarName(n, -1)
+	if !self.HasGlobal(n) {
+		self.globalIndex[n] = true
+		self.global = append(self.global, n)
+		self.g.g = append(self.g.g, awkG{
+			name:  n,
+			array: isArray,
+		})
+	}
+	return n
+}
+
 func (self *awkWriter) DefineGlobal(
 	n string,
 ) {
 	self.Global(n)
+}
+
+func (self *awkWriter) DefineGlobalArray(
+	n string,
+) {
+	self.GlobalArray(n)
+}
+
+func (self *awkWriter) Global(
+	n string,
+) string {
+	return self.defineGlobal(n, false)
+}
+
+func (self *awkWriter) GlobalArray(
+	n string,
+) string {
+	return self.defineGlobal(n, true)
+}
+
+func (self *awkWriter) GlobalN(
+	n string,
+	idx int,
+) string {
+	return self.Global(fmt.Sprintf("%s_%d", n, idx))
+}
+
+func (self *awkWriter) GlobalNArray(
+	n string,
+	idx int,
+) string {
+	return self.GlobalArray(fmt.Sprintf("%s_%d", n, idx))
 }
 
 func (self *awkWriter) globalVarName(
@@ -205,30 +281,16 @@ func (self *awkWriter) globalVarName(
 	}
 }
 
-func (self *awkWriter) Global(
-	n string,
-) string {
-	n = self.globalVarName(n, -1)
-	if !self.HasGlobal(n) {
-		self.globalIndex[n] = true
-		self.global = append(self.global, n)
-		self.g.g = append(self.g.g, n)
-	}
-	return n
-}
-
-func (self *awkWriter) GlobalN(
-	n string,
-	idx int,
-) string {
-	return self.Global(fmt.Sprintf("%s_%d", n, idx))
-}
-
-func (self *awkWriter) RID(i int) string {
-	if i >= self.param {
-		panic("invalid RID")
-	}
+func (self *awkWriter) rid(i int) string {
 	return fmt.Sprintf("rid_%d", i)
+}
+
+func (self *awkWriter) ridCommaList(sz int) string {
+	out := []string{}
+	for i := 0; i < sz; i++ {
+		out = append(out, fmt.Sprintf("%s\"\"", self.rid(i)))
+	}
+	return strings.Join(out, "\",\"")
 }
 
 // ----------------------------------------------------------------------------
@@ -398,6 +460,13 @@ func (self *awkWriter) processVarCmd(
 		}
 		self.DefineGlobal(cmd.arg[0])
 		return self.globalVarName(cmd.arg[0], -1), nil
+	case "ga", "globalarray":
+		if len(cmd.arg) != 1 {
+			return "", fmt.Errorf("global variable name has too many components")
+		}
+		self.DefineGlobalArray(cmd.arg[0])
+		return self.globalVarName(cmd.arg[0], -1), nil
+
 	case "l", "local":
 		if len(cmd.arg) == 1 {
 			self.DefineLocal(cmd.arg[0])
@@ -631,6 +700,20 @@ func (self *awkWriter) ArrIdx(
 	i string,
 ) string {
 	return fmt.Sprintf("%s[%s]", v, i)
+}
+
+func (self *awkWriter) SpreadArr(
+	array string,
+	start int,
+	size int,
+	ctx awkWriterCtx,
+) string {
+	arrName := self.Fmt(array, ctx)
+	out := []string{}
+	for i := start; i < size; i++ {
+		out = append(out, fmt.Sprintf("%s[%d]", arrName, i))
+	}
+	return strings.Join(out, ", ")
 }
 
 func (self *awkWriter) Fmt(

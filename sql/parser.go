@@ -476,20 +476,20 @@ func (self *Parser) parseOrderBy() (*OrderBy, error) {
 		return nil, err
 	}
 
-	if self.L.Token != TkId {
-		return nil, self.err("expect ASC/DESC after order by")
-	}
+	oB.Order = OrderAsc
 
-	switch self.L.lowerText() {
-	case "asc":
-		oB.Order = OrderAsc
-		break
+	if self.L.Token == TkId {
+		switch self.L.lowerText() {
+		case "asc":
+			oB.Order = OrderAsc
+			break
 
-	case "desc":
-		oB.Order = OrderDesc
-		break
+		case "desc":
+			oB.Order = OrderDesc
+			break
+		}
+		self.L.Next()
 	}
-	self.L.Next()
 
 	oB.CodeInfo = self.currentCodeInfo(start)
 	return oB, nil

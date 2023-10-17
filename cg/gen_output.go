@@ -3,27 +3,8 @@ package cg
 import (
 	"fmt"
 	"github.com/dianpeng/sql2awk/plan"
-	"github.com/dianpeng/sql2awk/sql"
 	"strings"
 )
-
-func generateSortOutput(
-	cg *queryCodeGen,
-	writer *awkWriter,
-	sortList []sql.Expr,
-) error {
-	for _, x := range sortList {
-		expr := cg.genExpr(x)
-		writer.Line(
-			"printf \"%s%[sep]\",(%[value])",
-			awkWriterCtx{
-				"sep":   cg.OutputSeparator,
-				"value": expr,
-			},
-		)
-	}
-	return nil
-}
 
 func generateOutputPrologue(
 	cg *queryCodeGen,
@@ -118,17 +99,10 @@ for (i = 1; i <= %[table_size]; i++) {
 	return nil
 }
 
-func (self *outputCodeGenWildcard) genSortOutput(output *plan.Output) error {
-	return generateSortOutput(self.cg, self.writer, output.SortList)
-}
-
 func (self *outputCodeGenWildcard) genOutput(output *plan.Output) error {
 	generateOutputPrologue(self.cg, self.writer)
 
 	if err := self.genVarOutput(output); err != nil {
-		return err
-	}
-	if err := self.genSortOutput(output); err != nil {
 		return err
 	}
 	self.writer.Line("print \"\"", nil)
@@ -150,7 +124,7 @@ func (self *outputCodeGenWildcard) genDistinct(output *plan.Output) error {
 		self.writer.Chunk(
 			`
 for (i = 0; i < %[table_size]; i++) {
-  distinct_key += %[table][i]"";
+  distinct_key = sprintf("%s%s", distinct_key, %[table][i]);
 }
 `,
 			awkWriterCtx{
@@ -316,16 +290,6 @@ func (self *outputCodeGenNormal) genVarOutput(
 	return nil
 }
 
-func (self *outputCodeGenNormal) genSortOutput(
-	output *plan.Output,
-) error {
-	return generateSortOutput(
-		self.cg,
-		self.writer,
-		output.SortList,
-	)
-}
-
 func (self *outputCodeGenNormal) genOutput(
 	output *plan.Output,
 ) error {
@@ -333,9 +297,6 @@ func (self *outputCodeGenNormal) genOutput(
 
 	self.genCalc(output)
 	if err := self.genVarOutput(output); err != nil {
-		return err
-	}
-	if err := self.genSortOutput(output); err != nil {
 		return err
 	}
 	self.writer.Line("print \"\"", nil)

@@ -140,12 +140,7 @@ func (self *Plan) planOutput(s *sql.Select) {
 		}
 	}
 
-	// 2) Sorting variable needs to be output as well, since we need to use
-	//    sort command line
-	if s.OrderBy != nil {
-		self.Output.SortList = s.OrderBy.Name
-	}
-
+	// 2) Output
 	if !self.Output.Wildcard {
 		self.Output.VarSize = len(self.Output.VarList)
 	} else {
@@ -174,8 +169,8 @@ func (self *Plan) planSort(s *sql.Select) {
 			asc = true
 		}
 		self.Sort = &Sort{
-			Asc:    asc,
-			Offset: self.Output.VarSize,
+			Asc:     asc,
+			VarList: s.OrderBy.Name,
 		}
 	}
 }
@@ -187,6 +182,6 @@ func (self *Plan) plan(s *sql.Select) {
 	self.planGroupBy(s)
 	self.planAgg(s)
 	self.planHaving(s)
-	self.planOutput(s)
 	self.planSort(s)
+	self.planOutput(s)
 }

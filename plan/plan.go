@@ -15,6 +15,7 @@ const (
 	AggAvg
 	AggSum
 	AggCount
+	AggPercentile
 )
 
 const (
@@ -34,6 +35,8 @@ func aggTypeToName(i int) string {
 		return "sum"
 	case AggCount:
 		return "count"
+	case AggPercentile:
+		return "percentile"
 	default:
 		return "unknown"
 	}
@@ -95,9 +98,50 @@ type GroupBy struct {
 type AggVar struct {
 	AggType int      // agg type
 	Value   sql.Expr // expression of *AGG*
+	Target  sql.Expr // target of AGG operation
 }
 
 func (self *AggVar) AggName() string { return aggTypeToName(self.AggType) }
+
+func (self *AggVar) param(idx int) *sql.Const {
+	suffix := self.Value.(*sql.Suffix)
+	if idx >= len(suffix.Call.Parameters) {
+		return nil
+	}
+	c := suffix.Call.Parameters[idx]
+	if c.Type() != sql.ExprConst {
+		return nil
+	}
+	return c.(*sql.Const)
+}
+
+func (self *AggVar) ParamInt(idx int) (int64, bool) {
+	if c := self.param(idx); c != nil && c.Ty == sql.ConstInt {
+		return c.Int, true
+	}
+	return 0, false
+}
+
+func (self *AggVar) ParamStr(idx int) (string, bool) {
+	if c := self.param(idx); c != nil && c.Ty == sql.ConstStr {
+		return c.String, true
+	}
+	return "", false
+}
+
+func (self *AggVar) ParamReal(idx int) (float64, bool) {
+	if c := self.param(idx); c != nil && c.Ty == sql.ConstReal {
+		return c.Real, true
+	}
+	return 0.0, false
+}
+
+func (self *AggVar) ParamBool(idx int) (bool, bool) {
+	if c := self.param(idx); c != nil && c.Ty == sql.ConstBool {
+		return c.Bool, true
+	}
+	return false, false
+}
 
 type Agg struct {
 	VarList []AggVar
@@ -112,19 +156,18 @@ type Having struct {
 // this is part of the generated *bash*, since we can call *sort* command line
 // to do the trick
 type Sort struct {
-	Asc    bool
-	Offset int
+	Asc     bool
+	VarList []sql.Expr // list of variable needs to be sorted, *same* as Output
 }
 
 // Output phase, basically just print out everything. This is related to the
 // selected vars
 type Output struct {
 	VarList  []sql.Expr
-	SortList []sql.Expr // list of variable that needs to be sortted
-	VarSize  int        // size of variable that will be output, considering wildcard
-	Wildcard bool       // whether select * shows up
-	Limit    int64      // maximum allowed entries output
-	Distinct bool       // whether perform distinct operation for the output
+	VarSize  int   // size of variable that will be output, considering wildcard
+	Wildcard bool  // whether select * shows up
+	Limit    int64 // maximum allowed entries output
+	Distinct bool  // whether perform distinct operation for the output
 }
 
 func (self *Output) HasLimit() bool { return self.Limit < math.MaxInt64 }

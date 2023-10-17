@@ -127,10 +127,6 @@ func (self *Plan) printOutput(
 		buf.WriteString(fmt.Sprintf("Var[%d]: %s\n", idx, sql.PrintExpr(expr)))
 	}
 
-	for idx, expr := range output.SortList {
-		buf.WriteString(fmt.Sprintf("Sort[%d]: %s\n", idx, sql.PrintExpr(expr)))
-	}
-
 }
 
 func (self *Plan) printSort(
@@ -145,6 +141,9 @@ func (self *Plan) printSort(
 			buf.WriteString("Order: asc\n")
 		} else {
 			buf.WriteString("Order: desc\n")
+		}
+		for idx, expr := range sort.VarList {
+			buf.WriteString(fmt.Sprintf("Sort[%d]: %s\n", idx, sql.PrintExpr(expr)))
 		}
 	}
 }

@@ -7,10 +7,16 @@ import (
 	"strings"
 )
 
-func Generate(x *plan.Plan) (string, error) {
+type Config struct {
+	OutputSeparator string
+	UseGoAWK        bool // whether using GoAWK, which does not have asorti and global access
+}
+
+func Generate(x *plan.Plan, config *Config) (string, error) {
 	g := &queryCodeGen{
-		OutputSeparator: " ",
+		OutputSeparator: config.OutputSeparator,
 		query:           x,
+		useGoAWK:        config.UseGoAWK,
 	}
 	return g.Gen()
 }
@@ -23,6 +29,7 @@ type queryCodeGen struct {
 	query           *plan.Plan
 	g               awkGlobal
 	tsRef           []tableScanGenRef
+	useGoAWK        bool
 }
 
 type subGen interface {
@@ -68,6 +75,16 @@ func (self *queryCodeGen) genGlobal() string {
 	lines = append(lines, fmt.Sprintf("  agg[\"\"] = 0"))
 
 	return strings.Join(lines, "\n")
+}
+
+func (self *queryCodeGen) genExprAsStr(
+	e sql.Expr,
+) string {
+	gen := &exprCodeGen{
+		cg: self,
+	}
+	gen.genExprAsStr(e)
+	return gen.o.String()
 }
 
 func (self *queryCodeGen) genExpr(
@@ -208,6 +225,13 @@ func (self *queryCodeGen) genHaving() (string, error) {
 	return self.genSubGen(gen, "having")
 }
 
+func (self *queryCodeGen) genSort() (string, error) {
+	gen := &sortCodeGen{
+		cg: self,
+	}
+	return self.genSubGen(gen, "sort")
+}
+
 func (self *queryCodeGen) genOutput() (string, error) {
 	gen := newOutputCodeGen(self)
 	return self.genSubGen(gen, "output")
@@ -216,7 +240,9 @@ func (self *queryCodeGen) genOutput() (string, error) {
 func (self *queryCodeGen) genBegin() string {
 	buf := &strings.Builder{}
 	for _, g := range self.g.globalList() {
-		buf.WriteString(fmt.Sprintf("  %s = \"\"\n", g))
+		if !g.array {
+			buf.WriteString(fmt.Sprintf("  %s\n", g.name))
+		}
 	}
 	buf.WriteString(self.genGlobal())
 	return buf.String()
@@ -228,6 +254,7 @@ func (self *queryCodeGen) Gen() (string, error) {
 	groupBy := ""
 	agg := ""
 	having := ""
+	sort := ""
 	output := ""
 
 	tableScan = self.genTableScan()
@@ -251,10 +278,21 @@ func (self *queryCodeGen) Gen() (string, error) {
 		having = x
 	}
 
+	if x, err := self.genSort(); err != nil {
+		return "", err
+	} else {
+		sort = x
+	}
+
 	if x, err := self.genOutput(); err != nil {
 		return "", err
 	} else {
 		output = x
+	}
+
+	builtinMisc := ""
+	if self.useGoAWK {
+		builtinMisc = builtinGoAWK
 	}
 
 	// finally our skeletong will be done here
@@ -299,8 +337,19 @@ END {
 %s
 
 # -----------------------------------------------------------------
+# sort
+# -----------------------------------------------------------------
+%s
+
+# -----------------------------------------------------------------
 # output
 # -----------------------------------------------------------------
+%s
+
+# -----------------------------------------------------------------
+# builtins
+# -----------------------------------------------------------------
+%s
 %s
 `,
 		self.genBegin(),
@@ -309,7 +358,10 @@ END {
 		groupBy,
 		agg,
 		having,
+		sort,
 		output,
+		builtinAWK,
+		builtinMisc,
 	), nil
 }
 
@@ -355,6 +407,15 @@ function having_flush() {
 }
 
 function having_done() {
+}
+
+function sort_next(...) {
+}
+
+function sort_flush() {
+}
+
+function sort_done() {
 }
 
 function output_next(...) {
