@@ -26,7 +26,7 @@
 select distinct t1.$2, t2.$2
 from tab("/tmp/t1.txt") as t1,
      tab("/tmp/t2.txt") as t2
-where (t1.$1 == t2.$1);
+where (t1.$1 == t2.$1)
 @==================
 
 @![result]

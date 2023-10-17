@@ -22,8 +22,8 @@
 select t1.$1, t2.$2, sum(t2.$3)
 from tab("/tmp/t1.txt") as t1,
      tab("/tmp/t2.txt") as t2
-group by t1.$1, t2.$2
 where t1.$1 == t2.$1
+group by t1.$1, t2.$2
 @==================
 
 @![result]

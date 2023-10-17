@@ -154,6 +154,10 @@ func (self *Parser) Parse() (*Code, error) {
 	}
 
 	c.CodeInfo = self.currentCodeInfo(start)
+	if self.L.Token != TkEof {
+		print("XXXXXXX: ", self.L.Token, "\n")
+		return nil, self.err("dangling code after parser thinks the statement is finished")
+	}
 	return c, nil
 }
 
