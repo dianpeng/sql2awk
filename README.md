@@ -1,22 +1,21 @@
 # Sql2Awk
 
-Transpiling SQL directly to AWK script.
+Transpile your SQL into AWK
 
 # Brief
 
-This little binary allows user to specify simple SQL statment, currently only
-supports query, and it will translate it into AWK code for execution.
+This little binary will translate your SQL, only query statement, into AWK script
 
 # Features
 
-- Nearly all SQL query related feature is supported
+- Nearly all SQL query features are supported
   - Join
   - Aggregation
   - Group by
   - Order by
   - Distinct
   - Limit
-  - No schema needed, use field index to reference value, dynamically typped
+  - No schema is needed, use field index to reference value, dynamically typped
 
 - Special aggregation function
   - Percentile
@@ -93,4 +92,4 @@ where is_string($2)
 
 # Status
 
-Bugs are expected for now, will do more tests :)
+It is not stable!  Bugs are expected, will do more tests :)
