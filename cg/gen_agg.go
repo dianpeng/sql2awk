@@ -122,6 +122,18 @@ func (self *aggCodeGen) genAggPercentile(
 	)
 }
 
+func (self *aggCodeGen) genAggHistogram(
+	idx int,
+) {
+	self.writer.Line(
+		`%[agg_val][$[g, agg_count]""] = %[agg_tmp];`,
+		awkWriterCtx{
+			"agg_val": self.writer.GlobalNArray("agg_val", idx),
+			"agg_tmp": self.writer.LocalN("agg_tmp", idx),
+		},
+	)
+}
+
 func (self *aggCodeGen) genAggOutput(l []plan.AggVar) {
 	for idx, v := range l {
 		switch v.AggType {
@@ -161,6 +173,41 @@ func (self *aggCodeGen) genAggOutput(l []plan.AggVar) {
 				awkWriterCtx{
 					"input": self.writer.GlobalNArray("agg_val", idx),
 					"n":     fmt.Sprintf("%d", nPercent),
+				},
+			)
+			break
+
+		case plan.AggHistogram:
+			// percentile has one extra argument to indicate the percentile number
+			// which is a constant number
+			min := "0"
+			max := "100"
+			bin := "5"
+			sep := ";"
+
+			if v, has := v.ParamNum(1); has {
+				min = v
+			}
+			if v, has := v.ParamNum(2); has {
+				max = v
+			}
+			if v, has := v.ParamNum(3); has {
+				bin = v
+			}
+			if v, has := v.ParamNum(4); has {
+				sep = v
+			}
+
+			// okay, now calls a builtin function to perform percentile calculation
+			self.writer.Assign(
+				self.writer.ArrIdxN("agg", idx),
+				"agg_histogram(%[input], 1, $[g, agg_count], %[min], %[max], %[bin], \"%[sep]\")",
+				awkWriterCtx{
+					"input": self.writer.GlobalNArray("agg_val", idx),
+					"min":   min,
+					"max":   max,
+					"bin":   bin,
+					"sep":   sep,
 				},
 			)
 			break
@@ -240,6 +287,10 @@ func (self *aggCodeGen) genNext() error {
 
 		case plan.AggPercentile:
 			self.genAggPercentile(idx)
+			break
+
+		case plan.AggHistogram:
+			self.genAggHistogram(idx)
 			break
 
 		default:

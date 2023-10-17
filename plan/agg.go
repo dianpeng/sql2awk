@@ -100,6 +100,10 @@ func (self *Plan) isAggFunc(
 		ty = AggPercentile
 		break
 
+	case "histogram":
+		ty = AggHistogram
+		break
+
 	default:
 		return -1, nil, nil, nil
 	}

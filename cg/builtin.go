@@ -26,6 +26,59 @@ function order_key(v, local_typeof) {
   }
 }
 
+# helper to support histogram calculation in AWK
+function agg_histogram(input,
+                       input_start,
+                       input_size,
+                       minval,
+                       maxval,
+                       numbin, osep, step, cur, bin, i, v, j) {
+  if (numbin <= 0 || (maxval < minval)) {
+    return "[invalid input]";
+  }
+
+  step = (maxval - minval) / numbin;
+  if (length(osep) == 0) {
+    osep = ":";
+  }
+
+  # cleanup the bins
+  for (i = 0; i <= numbin+1; i++) {
+    bin[i] = 0;
+  }
+
+  for (i = input_start; i <= input_size; i++) {
+    v = input[i""]; # value of the input
+    cur = minval;
+
+    for (j = 1; j <= numbin; j++) {
+      if (v < cur) {
+        # previous index is the one we are targeting
+        j = j -1;
+        break
+      } else {
+        # continue searching
+        cur += step;
+      }
+    }
+
+    bin[j]++;
+  }
+
+  # iterate through the *bin* to report the result
+  output = array_join(bin, 1, numbin, osep);
+  return sprintf("!%d%s%s%s!%d", bin[0], osep, output, osep, bin[numbin+1])
+}
+
+function array_join(array, start, end, sep,    result, i) {
+	if (sep == "")
+   sep = ";"
+	result = array[start]
+	for (i = start + 1; i <= end; i++)
+    result = result sep array[i]
+	return result
+}
+
 # type conversion and type assertion
 function is_number(v, xx) {
   xx = typeof(v);

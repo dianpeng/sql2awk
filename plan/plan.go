@@ -16,6 +16,7 @@ const (
 	AggSum
 	AggCount
 	AggPercentile
+	AggHistogram
 )
 
 const (
@@ -37,6 +38,8 @@ func aggTypeToName(i int) string {
 		return "count"
 	case AggPercentile:
 		return "percentile"
+	case AggHistogram:
+		return "histogram"
 	default:
 		return "unknown"
 	}
@@ -122,18 +125,32 @@ func (self *AggVar) ParamInt(idx int) (int64, bool) {
 	return 0, false
 }
 
-func (self *AggVar) ParamStr(idx int) (string, bool) {
-	if c := self.param(idx); c != nil && c.Ty == sql.ConstStr {
-		return c.String, true
-	}
-	return "", false
-}
-
 func (self *AggVar) ParamReal(idx int) (float64, bool) {
 	if c := self.param(idx); c != nil && c.Ty == sql.ConstReal {
 		return c.Real, true
 	}
 	return 0.0, false
+}
+
+func (self *AggVar) ParamNum(idx int) (string, bool) {
+	if c := self.param(idx); c != nil {
+		switch c.Ty {
+		case sql.ConstReal:
+			return fmt.Sprintf("%f", c.Real), true
+		case sql.ConstInt:
+			return fmt.Sprintf("%d", c.Int), true
+		default:
+			break
+		}
+	}
+	return "", false
+}
+
+func (self *AggVar) ParamStr(idx int) (string, bool) {
+	if c := self.param(idx); c != nil && c.Ty == sql.ConstStr {
+		return c.String, true
+	}
+	return "", false
 }
 
 func (self *AggVar) ParamBool(idx int) (bool, bool) {
