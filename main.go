@@ -39,6 +39,9 @@ func main() {
 			OutputSeparator: " ",
 		},
 	)
+	if err != nil {
+		oops("code-gen", err)
+	}
 
 	fmt.Printf("%s\n", awkCode)
 	os.Exit(0)
