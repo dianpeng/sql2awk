@@ -152,7 +152,16 @@ func (self *Plan) anaAggExprPrimary(
 	if err != nil {
 		return err
 	}
+
 	if ty == -1 {
+		if err := self.anaAggExpr(primary.Leading); err != nil {
+			return err
+		}
+		for _, x := range primary.Suffix {
+			if err := self.anaAggExpr(x); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 

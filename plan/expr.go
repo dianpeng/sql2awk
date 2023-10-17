@@ -24,6 +24,27 @@ import (
 // the set object used to track all the table index belongs to a certain expr
 type exprTableAccessSet map[int]bool
 
+func (self *exprTableAccessSet) Has(tidx int) bool {
+	_, ok := (*self)[tidx]
+	return ok
+}
+
+func (self *exprTableAccessSet) Static() bool {
+	return len(*self) == 0
+}
+
+func (self *exprTableAccessSet) Single() bool {
+	return len(*self) == 1
+}
+
+func (self *exprTableAccessSet) Print() string {
+	buf := strings.Builder{}
+	for k, _ := range *self {
+		buf.WriteString(fmt.Sprintf("%d;", k))
+	}
+	return buf.String()
+}
+
 type exprTableAccessInfo struct {
 	root sql.Expr                        // root expression
 	info map[sql.Expr]exprTableAccessSet // expression -> set mapping
@@ -56,27 +77,6 @@ func (self *exprTableAccessInfo) Ref(expr sql.Expr, tidx int) bool {
 	s := self.s(expr)
 
 	return s.Has(tidx)
-}
-
-func (self *exprTableAccessSet) Has(tidx int) bool {
-	_, ok := (*self)[tidx]
-	return ok
-}
-
-func (self *exprTableAccessSet) Static() bool {
-	return len(*self) == 0
-}
-
-func (self *exprTableAccessSet) Single() bool {
-	return len(*self) == 1
-}
-
-func (self *exprTableAccessSet) Print() string {
-	buf := strings.Builder{}
-	for k, _ := range *self {
-		buf.WriteString(fmt.Sprintf("%d;", k))
-	}
-	return buf.String()
 }
 
 func (self *exprTableAccessInfo) Print() string {
