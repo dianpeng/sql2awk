@@ -97,9 +97,16 @@ func (self *sortCodeGen) genFlush() error {
 			)
 		}
 
+		sortFunc := "asorti"
+		if !sort.Asc {
+			sortFunc = "asorti_rev"
+		}
+
 		self.writer.Line(
-			`$[l, sort_output_length] = asorti($[ga, sort_index], $[ga, sort_output]);`,
-			nil,
+			`$[l, sort_output_length] = %[sort]($[ga, sort_index], $[ga, sort_output]);`,
+			awkWriterCtx{
+				"sort": sortFunc,
+			},
 		)
 		self.writer.Chunk(
 			`

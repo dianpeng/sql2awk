@@ -8,11 +8,11 @@
 @![sql]
 @!goawk=disable
 @@@@@@@@@@@@@@@@@@
-select percentile($1, 50)
+select histogram($1, 0, 200, 10)
 from tab("/tmp/t1.txt")
 @==================
 
-@![save]
-@!path:/tmp/sql2.txt
+@![result]
 @@@@@@@@@@@@@@
+!0;2;0;0;0;0;0;0;0;0;0;!0
 @===================

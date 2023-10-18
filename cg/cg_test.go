@@ -8,16 +8,19 @@ import (
 	"github.com/dianpeng/sql2awk/sql"
 	"github.com/stretchr/testify/assert"
 	"io"
+	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
 
-const TEST_DIR = "./test/assets"
+const TEST_DIR = "./test"
 
 // ---------------------------------------------------------------------------
 // An automatic testing/verification tools for sql2awk. We use a simple text
@@ -36,8 +39,8 @@ type cookbook struct {
 	parsed   sectionList
 	input    []string
 	code     string
-	awkProg  *gawkp.Program
 	result   string
+	useGoAwk bool
 }
 
 type section struct {
@@ -299,6 +302,31 @@ func saveToTmp(
 	)
 }
 
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
+
+var letterRunes = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func rndStr(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
+}
+
+func saveToTmpRandom(
+	data string,
+) (string, error) {
+	x := fmt.Sprintf("/tmp/%s.awk", rndStr(16))
+	if err := saveToTmp(x, data); err != nil {
+		return "", err
+	} else {
+		return x, nil
+	}
+}
+
 func (self *cookbook) prepareTable() error {
 	for _, x := range self.parsed.get("table") {
 		if name := x.attrAt("name"); name != "" {
@@ -326,9 +354,9 @@ func (self *cookbook) genAwk() error {
 	if err != nil {
 		return fmt.Errorf("[plan]: %s", err)
 	}
-	useGoAWK := true
+	self.useGoAwk = true
 	if yy.attrAt("goawk") == "disable" {
-		useGoAWK = false
+		self.useGoAwk = false
 	}
 	p, err := plan.PlanCode(c)
 	if err != nil {
@@ -337,7 +365,7 @@ func (self *cookbook) genAwk() error {
 
 	code, err := Generate(p, &Config{
 		OutputSeparator: " ",
-		UseGoAWK:        useGoAWK,
+		UseGoAWK:        self.useGoAwk,
 	})
 	if err != nil {
 		return fmt.Errorf("[plan]: %s", err)
@@ -346,30 +374,73 @@ func (self *cookbook) genAwk() error {
 	return nil
 }
 
+func (self *cookbook) runGoAwk() error {
+	prog, err := gawkp.ParseProgram(
+		[]byte(self.code),
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("[plan]: %s", err)
+	}
+
+	buf := strings.Builder{}
+	interp, err := gawki.New(prog)
+	if err != nil {
+		return err
+	}
+	config := &gawki.Config{
+		Output: &buf,
+		Args:   self.input,
+	}
+	_, err = interp.Execute(config)
+	if err != nil {
+		return err
+	}
+	self.result = buf.String()
+	return nil
+}
+
+func (self *cookbook) runSysAwk() error {
+	awkPath := "/usr/bin/awk"
+	awkFile, err := saveToTmpRandom(
+		self.code,
+	)
+	if err != nil {
+		return err
+	}
+
+	args := []string{
+		"-f",
+		awkFile,
+	}
+	args = append(args, self.input...)
+
+	cmd := exec.Command(
+		awkPath,
+		args...,
+	)
+	stdout := &strings.Builder{}
+	cmd.Stdout = stdout
+
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	self.result = stdout.String()
+	return nil
+}
+
 func (self *cookbook) runAwk() error {
 	if verify := self.parsed.getOne("result"); verify != nil {
-		prog, err := gawkp.ParseProgram(
-			[]byte(self.code),
-			nil,
-		)
-		if err != nil {
-			return fmt.Errorf("[plan]: %s", err)
+		if self.useGoAwk {
+			if err := self.runGoAwk(); err != nil {
+				return err
+			}
+		} else {
+			if err := self.runSysAwk(); err != nil {
+				return err
+			}
 		}
-		self.awkProg = prog
-		buf := strings.Builder{}
-		interp, err := gawki.New(self.awkProg)
-		if err != nil {
-			return err
-		}
-		config := &gawki.Config{
-			Output: &buf,
-			Args:   self.input,
-		}
-		_, err = interp.Execute(config)
-		if err != nil {
-			return err
-		}
-		self.result = buf.String()
 	} else if save := self.parsed.getOne("save"); save != nil {
 		if path := save.attrAt("path"); path != "" {
 			return saveToTmp(
@@ -479,23 +550,33 @@ func (self *cookbook) verify() error {
 
 func TestCodeGen(t *testing.T) {
 	assert := assert.New(t)
-	fList, err := os.ReadDir(
-		TEST_DIR,
-	)
-	assert.True(err == nil)
-	for _, fentry := range fList {
-		if fentry.IsDir() {
-			continue
-		}
-		x := filepath.Join(TEST_DIR, fentry.Name())
-		cb := &cookbook{
-			filename: x,
-		}
-		if err := cb.run(); err != nil {
-			print(fmt.Sprintf("cookbook(%s) failed: %s\n", x, err))
-			assert.True(false)
-		} else {
-			print(fmt.Sprintf("cookbook(%s) passed\n", x))
+	dirList := []string{TEST_DIR}
+
+	for len(dirList) > 0 {
+		dir := dirList[0]
+		dirList = dirList[1:]
+
+		fList, err := os.ReadDir(
+			dir,
+		)
+		assert.True(err == nil)
+
+		for _, fentry := range fList {
+			path := filepath.Join(dir, fentry.Name())
+			if fentry.IsDir() {
+				dirList = append(dirList, path)
+				continue
+			} else {
+				cb := &cookbook{
+					filename: path,
+				}
+				if err := cb.run(); err != nil {
+					print(fmt.Sprintf("cookbook(%s) failed: %s\n", path, err))
+					assert.True(false)
+				} else {
+					print(fmt.Sprintf("cookbook(%s) passed\n", path))
+				}
+			}
 		}
 	}
 }

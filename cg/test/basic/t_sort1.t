@@ -1,18 +1,21 @@
 @![table]
 @!name:/tmp/t1.txt
 @@@@@@@@@@@@@@
-1 2 3
+100 3 4
 1 2 3
 @================
 
 @![sql]
 @!goawk=disable
 @@@@@@@@@@@@@@@@@@
-select histogram($1, 0, 200, 10)
+select *
 from tab("/tmp/t1.txt")
+order by $1, $2
 @==================
 
-@![save]
-@!path:/tmp/sql3.txt
+@![result]
+@!order:none
 @@@@@@@@@@@@@@
+1 2 3
+100 3 4
 @===================

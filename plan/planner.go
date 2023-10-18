@@ -32,9 +32,6 @@ func (self *Plan) planTableScan(s *sql.Select) {
 	}
 
 	for _, td := range self.tableList {
-		if !s.Projection.HasWildcard() && td.IsDangling() {
-			continue
-		}
 		var filter sql.Expr
 
 		if info != nil {

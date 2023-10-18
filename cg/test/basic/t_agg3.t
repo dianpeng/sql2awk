@@ -1,8 +1,7 @@
 @![sql]
 @@@@@@@@@@@@@@@
-select avg($1)
+select count(1)
 from tab("/tmp/t.txt")
-having sum($1) == 16
 @=================
 
 @![table]

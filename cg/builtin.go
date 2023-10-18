@@ -130,6 +130,15 @@ function kv_getv(kv, lv) {
   split(kv, lv, ":");
   return lv[2];
 }
+
+function asorti_rev(input, out, tmp_out, local_l, i) {
+  local_l = asorti(input, tmp_out);
+  clear_array(out);
+  for (i = local_l; i > 0; i--) {
+    out[(local_l-i)+1] = tmp_out[i];
+  }
+  return local_l;
+}
 `
 
 const builtinGoAWK = `
