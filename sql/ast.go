@@ -256,6 +256,229 @@ func (self *Ternary) Type() int       { return ExprTernary }
 func (self *Ternary) CInfo() CodeInfo { return self.CodeInfo }
 
 /* ----------------------------------------------------------------------------
+ * Visitor
+ * ---------------------------------------------------------------------------*/
+
+type ExprVisitor interface {
+	AcceptConst(*Const) (bool, error)
+	AcceptRef(*Ref) (bool, error)
+	AcceptSuffix(*Suffix) (bool, error)
+	AcceptPrimary(*Primary) (bool, error)
+	AcceptUnary(*Unary) (bool, error)
+	AcceptBinary(*Binary) (bool, error)
+	AcceptTernary(*Ternary) (bool, error)
+}
+
+func visitExprPostOrder(
+	visitor ExprVisitor,
+	expr Expr,
+) error {
+	switch expr.Type() {
+	case ExprConst:
+		if _, err := visitor.AcceptConst(expr.(*Const)); err != nil {
+			return err
+		}
+		return nil
+
+	case ExprRef:
+		if _, err := visitor.AcceptRef(expr.(*Ref)); err != nil {
+			return err
+		}
+		return nil
+
+	case ExprSuffix:
+		suff := expr.(*Suffix)
+		switch suff.Ty {
+		case SuffixCall:
+			for _, x := range suff.Call.Parameters {
+				if err := visitExprPostOrder(visitor, x); err != nil {
+					return err
+				}
+			}
+			break
+		case SuffixIndex:
+			return visitExprPostOrder(visitor, suff.Index)
+		default:
+			break
+		}
+		if _, err := visitor.AcceptSuffix(suff); err != nil {
+			return err
+		}
+		return nil
+	case ExprPrimary:
+		primary := expr.(*Primary)
+		if err := visitExprPostOrder(visitor, primary.Leading); err != nil {
+			return err
+		}
+		for _, x := range primary.Suffix {
+			if err := visitExprPostOrder(visitor, x); err != nil {
+				return err
+			}
+		}
+		if _, err := visitor.AcceptPrimary(primary); err != nil {
+			return err
+		}
+		return nil
+
+	case ExprUnary:
+		unary := expr.(*Unary)
+		if err := visitExprPostOrder(visitor, unary.Operand); err != nil {
+			return err
+		}
+		if _, err := visitor.AcceptUnary(unary); err != nil {
+			return err
+		}
+		return nil
+
+	case ExprBinary:
+		binary := expr.(*Binary)
+		if err := visitExprPostOrder(visitor, binary.L); err != nil {
+			return err
+		}
+		if err := visitExprPostOrder(visitor, binary.R); err != nil {
+			return err
+		}
+		if _, err := visitor.AcceptBinary(binary); err != nil {
+			return err
+		}
+		return nil
+
+	case ExprTernary:
+		ternary := expr.(*Ternary)
+		if err := visitExprPostOrder(visitor, ternary.Cond); err != nil {
+			return err
+		}
+		if err := visitExprPostOrder(visitor, ternary.B0); err != nil {
+			return err
+		}
+		if err := visitExprPostOrder(visitor, ternary.B1); err != nil {
+			return err
+		}
+		if _, err := visitor.AcceptTernary(ternary); err != nil {
+			return err
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+func visitExprPreOrder(
+	visitor ExprVisitor,
+	expr Expr,
+) error {
+	switch expr.Type() {
+	case ExprConst:
+		if _, err := visitor.AcceptConst(expr.(*Const)); err != nil {
+			return err
+		}
+		return nil
+
+	case ExprRef:
+		if _, err := visitor.AcceptRef(expr.(*Ref)); err != nil {
+			return err
+		}
+		return nil
+
+	case ExprSuffix:
+		suff := expr.(*Suffix)
+		if goon, err := visitor.AcceptSuffix(suff); err != nil {
+			return err
+		} else if err != nil {
+			return err
+		} else if goon {
+			switch suff.Ty {
+			case SuffixCall:
+				for _, x := range suff.Call.Parameters {
+					if err := visitExprPreOrder(visitor, x); err != nil {
+						return err
+					}
+				}
+				break
+			case SuffixIndex:
+				return visitExprPreOrder(visitor, suff.Index)
+			default:
+				break
+			}
+		}
+		return nil
+	case ExprPrimary:
+		primary := expr.(*Primary)
+		if goon, err := visitor.AcceptPrimary(primary); err != nil {
+			return err
+		} else if err != nil {
+			return err
+		} else if goon {
+			if err := visitExprPreOrder(visitor, primary.Leading); err != nil {
+				return err
+			}
+			for _, x := range primary.Suffix {
+				if err := visitExprPreOrder(visitor, x); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+
+	case ExprUnary:
+		unary := expr.(*Unary)
+		if goon, err := visitor.AcceptUnary(unary); err != nil {
+			return err
+		} else if goon {
+			return visitExprPreOrder(visitor, unary.Operand)
+		}
+		return nil
+
+	case ExprBinary:
+		binary := expr.(*Binary)
+		if goon, err := visitor.AcceptBinary(binary); err != nil {
+			return err
+		} else if goon {
+			if err := visitExprPreOrder(visitor, binary.L); err != nil {
+				return err
+			}
+			if err := visitExprPreOrder(visitor, binary.R); err != nil {
+				return err
+			}
+		}
+		return nil
+
+	case ExprTernary:
+		ternary := expr.(*Ternary)
+		if goon, err := visitor.AcceptTernary(ternary); err != nil {
+			return err
+		} else if goon {
+			if err := visitExprPreOrder(visitor, ternary.Cond); err != nil {
+				return err
+			}
+			if err := visitExprPreOrder(visitor, ternary.B0); err != nil {
+				return err
+			}
+			if err := visitExprPreOrder(visitor, ternary.B1); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return nil
+	}
+}
+
+func VisitExprPreOrder(
+	visitor ExprVisitor,
+	expr Expr,
+) error {
+	return visitExprPreOrder(visitor, expr)
+}
+
+func VisitExprPostOrder(
+	visitor ExprVisitor,
+	expr Expr,
+) error {
+	return visitExprPostOrder(visitor, expr)
+}
+
+/* ----------------------------------------------------------------------------
  * Clone
  * ---------------------------------------------------------------------------*/
 func cloneExprConst(

@@ -23,65 +23,50 @@ package plan
 
 /*
 
-func (self *Plan) exprHasAggPrimary(
-	primary *sql.Primary,
-) bool {
+type visitorHasAgg struct {
+	hasAgg bool
+}
+
+func (self *visitorHasAgg) AcceptConst(*sql.Const) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorHasAgg) AcceptRef(*sql.Ref) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorHasAgg) AcceptSuffix(*sql.Suffix) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorHasAgg) AcceptPrimary(*sql.Primary) (bool, error) {
 	idx, _, _, _ := self.isAggFunc(primary)
 	if idx < 0 {
-		if self.exprHasAgg(primary.Leading) {
-			return true
-		}
-		for _, x := range primary.Suffix {
-			if self.exprHasAgg(x) {
-				return true
-			}
-		}
-		return false
+		return true, nil
 	} else {
-		return true
+		self.hasAgg = true
+		return false, nil
 	}
 }
 
-func (self *Plan) exprHasAggSuffix(
-	suffix *sql.Suffix,
-) bool {
-	switch suffix.Ty {
-	case sql.SuffixIndex:
-		return self.exprHasAgg(suffix.Index)
-	case sql.SuffixCall:
-		for _, x := range suffix.Call.Parameters {
-			if self.exprHasAgg(x) {
-				return true
-			}
-		}
-		return false
-	default:
-		return false
-	}
+func (self *visitorHasAgg) AcceptTernary(*sql.Ternary) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorHasAgg) AcceptBinary(*sql.Binary) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorHasAgg) AcceptUnary(*sql.Unary) (bool, error) {
+	return true, nil
 }
 
 func (self *Plan) exprHasAgg(
 	expr sql.Expr,
 ) bool {
-	switch expr.Type() {
-	default:
-		return false
-	case sql.ExprPrimary:
-		return self.exprHasAggPrimary(expr.(*sql.Primary))
-	case sql.ExprSuffix:
-		return self.exprHasAggSuffix(expr.(*sql.Suffix))
-	case sql.ExprUnary:
-		unary := expr.(*sql.Unary)
-		return self.exprHasAgg(unary.Operand)
-	case sql.ExprBinary:
-		binary := expr.(*sql.Binary)
-		return self.exprHasAgg(binary.L) || self.exprHasAgg(binary.R)
-	case sql.ExprTernary:
-		ternary := expr.(*sql.Binary)
-		return self.exprHasAgg(ternary.Cond) ||
-			self.exprHasAgg(ternary.B0) ||
-			self.exprHasAgg(ternary.B1)
-	}
+	v := &visitorHasAgg{}
+	sql.VisitExprPreOrder(v, expr)
+	return v.hasAgg
 }
 
 func (self *Plan) anaGroupBy(s *sql.Select) error {
@@ -94,7 +79,7 @@ func (self *Plan) anaGroupBy(s *sql.Select) error {
 			if self.exprHasAgg(v) {
 				return self.err("sema", "[group_by]: $d'th expression has aggregation", idx)
 			}
-			groupByInfo.Union(newExprTableAccessInfo(v).info)
+			groupByInfo.union(newExprTableAccessInfo(v).info)
 		}
 
 		// check all the accessed vars, that is not showed up inside of the agg must
@@ -108,7 +93,7 @@ func (self *Plan) anaGroupBy(s *sql.Select) error {
 				if col, ok := v.(*sql.Col); ok {
 					// check whether the Col's expression is aggregation or not
 					if !self.exprHasAgg(col.Value) {
-						projectInfo.Union(newExprTableAccessInfo(col.Value).info)
+						projectInfo.union(newExprTableAccessInfo(col.Value).info)
 					}
 				}
 			}

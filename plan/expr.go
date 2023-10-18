@@ -22,53 +22,154 @@ import (
 // Finally we learn that each node's table access set.
 
 // the set object used to track all the table index belongs to a certain expr
-type exprTableAccessSet map[int]bool
+type exprTableAccessSet struct {
+	set map[int][]int
+}
 
-func (self *exprTableAccessSet) Has(tidx int) bool {
-	_, ok := (*self)[tidx]
-	return ok
+func (self *exprTableAccessSet) length() int {
+	return len(self.set)
+}
+
+func (self *exprTableAccessSet) hasTable(tidx int) bool {
+	v, _ := self.set[tidx]
+	return len(v) > 0
+}
+
+func (self *exprTableAccessSet) has(
+	tidx int,
+	fidx int,
+) bool {
+	if x, ok := self.set[tidx]; ok {
+		for _, v := range x {
+			if v == fidx {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (self *exprTableAccessSet) Static() bool {
-	return len(*self) == 0
+	return len(self.set) == 0
 }
 
 func (self *exprTableAccessSet) Single() bool {
-	return len(*self) == 1
+	return len(self.set) == 1
 }
 
 func (self *exprTableAccessSet) Print() string {
 	buf := strings.Builder{}
-	for k, _ := range *self {
-		buf.WriteString(fmt.Sprintf("%d;", k))
+	for tidx, tset := range self.set {
+		for _, fidx := range tset {
+			buf.WriteString(fmt.Sprintf("[%d:%d];", tidx, fidx))
+		}
 	}
 	return buf.String()
 }
 
+func (self *exprTableAccessSet) add(
+	tidx int,
+	fidx int,
+) {
+	v, ok := self.set[tidx]
+	if ok {
+		v = append(v, fidx)
+	} else {
+		v = []int{fidx}
+	}
+	self.set[tidx] = v
+}
+
+func (self *exprTableAccessSet) unionFidxArray(
+	dst []int,
+	src []int,
+) []int {
+	tmp := append(dst, src...)
+	seen := make(map[int]bool)
+	out := []int{}
+	for _, x := range tmp {
+		if _, ok := seen[x]; !ok {
+			seen[x] = true
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+func (self *exprTableAccessSet) containFidxArray(
+	lhs []int,
+	rhs []int,
+) bool {
+	for _, vv := range rhs {
+		found := false
+		for _, vvv := range lhs {
+			if vvv == vv {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
+func (self *exprTableAccessSet) union(
+	that *exprTableAccessSet,
+) {
+	for tidx, rhs := range that.set {
+		v, _ := self.set[tidx]
+		v = self.unionFidxArray(
+			v,
+			rhs,
+		)
+		self.set[tidx] = v
+	}
+}
+
+func (self *exprTableAccessSet) contain(
+	that *exprTableAccessSet,
+) bool {
+	for tidx, rhs := range that.set {
+		v, _ := self.set[tidx]
+		if !self.containFidxArray(v, rhs) {
+			return false
+		}
+	}
+	return true
+}
+
+func newExprTableAccessSet() *exprTableAccessSet {
+	return &exprTableAccessSet{
+		set: make(map[int][]int),
+	}
+}
+
 type exprTableAccessInfo struct {
-	root sql.Expr                        // root expression
-	info map[sql.Expr]exprTableAccessSet // expression -> set mapping
+	root sql.Expr                         // root expression
+	info map[sql.Expr]*exprTableAccessSet // expression -> set mapping
 }
 
 func newExprTableAccessInfo(root sql.Expr) *exprTableAccessInfo {
 	info := &exprTableAccessInfo{
 		root: root,
-		info: make(map[sql.Expr]exprTableAccessSet),
+		info: make(map[sql.Expr]*exprTableAccessSet),
 	}
 	info.mark(root)
 	return info
 }
 
-func (self *exprTableAccessInfo) s(expr sql.Expr) exprTableAccessSet {
+func (self *exprTableAccessInfo) s(expr sql.Expr) *exprTableAccessSet {
 	r, ok := self.info[expr]
 	if !ok {
-		r = make(exprTableAccessSet)
+		r = newExprTableAccessSet()
 		self.info[expr] = r
 	}
 	return r
 }
 
-func (self *exprTableAccessInfo) setOrNil(expr sql.Expr) exprTableAccessSet {
+func (self *exprTableAccessInfo) setOrNil(expr sql.Expr) *exprTableAccessSet {
 	r, _ := self.info[expr]
 	return r
 }
@@ -76,7 +177,7 @@ func (self *exprTableAccessInfo) setOrNil(expr sql.Expr) exprTableAccessSet {
 func (self *exprTableAccessInfo) Ref(expr sql.Expr, tidx int) bool {
 	s := self.s(expr)
 
-	return s.Has(tidx)
+	return s.hasTable(tidx)
 }
 
 func (self *exprTableAccessInfo) Print() string {
@@ -90,69 +191,45 @@ func (self *exprTableAccessInfo) Print() string {
 }
 
 func (self *exprTableAccessInfo) include(
-	dst exprTableAccessSet,
-	src exprTableAccessSet,
+	dst *exprTableAccessSet,
+	src *exprTableAccessSet,
 ) {
-	for k, _ := range src {
-		dst[k] = true
-	}
+	dst.union(src)
 }
 
 // make sure that each expression has already been settled, otherwise it panic
 func (self *exprTableAccessInfo) mark(
 	expr sql.Expr,
 ) {
-	// The visiting order is *post order*, ie first its children and then all the
-	// rest
-	switch expr.Type() {
-	default:
-		break
-
-	case sql.ExprRef:
-		self.markRef(expr.(*sql.Ref))
-		break
-
-	case sql.ExprPrimary:
-		self.markPrimary(expr.(*sql.Primary))
-		break
-
-	case sql.ExprSuffix:
-		self.markSuffix(expr.(*sql.Suffix))
-		break
-
-	case sql.ExprUnary:
-		self.markUnary(expr.(*sql.Unary))
-		break
-
-	case sql.ExprBinary:
-		self.markBinary(expr.(*sql.Binary))
-		break
-
-	case sql.ExprTernary:
-		self.markTernary(expr.(*sql.Ternary))
-		break
-	}
+	sql.VisitExprPostOrder(
+		self,
+		expr,
+	)
 }
 
-func (self *exprTableAccessInfo) markRef(
+func (self *exprTableAccessInfo) AcceptConst(
+	*sql.Const,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *exprTableAccessInfo) AcceptRef(
 	ref *sql.Ref,
-) {
+) (bool, error) {
 	if ref.CanName.IsTableColumn() {
 		set := self.s(ref)
-		set[ref.CanName.TableIndex] = true
+		set.add(
+			ref.CanName.TableIndex,
+			ref.CanName.ColumnIndex,
+		)
 	}
+	return true, nil
 }
 
 func (self *exprTableAccessInfo) markSuffixCall(
 	suffix *sql.Suffix,
 ) {
-	for _, x := range suffix.Call.Parameters {
-		self.mark(x)
-	}
-
 	set := self.s(suffix)
-
-	// include all its children's set
 	for _, x := range suffix.Call.Parameters {
 		thatSet := self.s(x)
 		self.include(set, thatSet)
@@ -162,13 +239,12 @@ func (self *exprTableAccessInfo) markSuffixCall(
 func (self *exprTableAccessInfo) markSuffixIndex(
 	suffix *sql.Suffix,
 ) {
-	self.mark(suffix.Index)
 	self.include(self.s(suffix), self.s(suffix.Index))
 }
 
-func (self *exprTableAccessInfo) markSuffix(
+func (self *exprTableAccessInfo) AcceptSuffix(
 	suffix *sql.Suffix,
-) {
+) (bool, error) {
 	switch suffix.Ty {
 	case sql.SuffixCall:
 		self.markSuffixCall(suffix)
@@ -181,56 +257,51 @@ func (self *exprTableAccessInfo) markSuffix(
 	default:
 		break
 	}
+	return true, nil
 }
 
-func (self *exprTableAccessInfo) markPrimary(
+func (self *exprTableAccessInfo) AcceptPrimary(
 	primary *sql.Primary,
-) {
+) (bool, error) {
 	if primary.CanName.IsTableColumn() {
 		set := self.s(primary)
-		set[primary.CanName.TableIndex] = true
+		set.add(
+			primary.CanName.TableIndex,
+			primary.CanName.ColumnIndex,
+		)
 	} else {
-		self.mark(primary.Leading)
-		for _, x := range primary.Suffix {
-			self.markSuffix(x)
-		}
-
 		set := self.s(primary)
-
 		self.include(set, self.s(primary.Leading))
 		for _, x := range primary.Suffix {
 			self.include(set, self.s(x))
 		}
 	}
+	return true, nil
 }
 
-func (self *exprTableAccessInfo) markUnary(
+func (self *exprTableAccessInfo) AcceptUnary(
 	unary *sql.Unary,
-) {
-	self.mark(unary.Operand)
+) (bool, error) {
 	self.include(self.s(unary), self.s(unary.Operand))
+	return true, nil
 }
 
-func (self *exprTableAccessInfo) markBinary(
+func (self *exprTableAccessInfo) AcceptBinary(
 	binary *sql.Binary,
-) {
-	self.mark(binary.L)
-	self.mark(binary.R)
+) (bool, error) {
 	set := self.s(binary)
 	self.include(set, self.s(binary.L))
 	self.include(set, self.s(binary.R))
+	return true, nil
 }
 
-func (self *exprTableAccessInfo) markTernary(
+func (self *exprTableAccessInfo) AcceptTernary(
 	ternary *sql.Ternary,
-) {
-	self.mark(ternary.Cond)
-	self.mark(ternary.B0)
-	self.mark(ternary.B1)
-
+) (bool, error) {
 	set := self.s(ternary)
 
 	self.include(set, self.s(ternary.Cond))
 	self.include(set, self.s(ternary.B0))
 	self.include(set, self.s(ternary.B1))
+	return true, nil
 }

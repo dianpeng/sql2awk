@@ -33,9 +33,9 @@ where foo(f1, f2)
 
 		{
 			x := info.info[cond]
-			assert.Equal(len(x), 2)
-			assert.True(x[0])
-			assert.True(x[1])
+			assert.Equal(x.length(), 2)
+			assert.True(x.hasTable(0))
+			assert.True(x.hasTable(1))
 		}
 	}
 }
@@ -64,26 +64,26 @@ where (f1 == 100 && f2 == 200)
 
 		{
 			x := info.info[cond]
-			assert.Equal(len(x), 2)
-			assert.True(x[0])
-			assert.True(x[1])
+			assert.Equal(x.length(), 2)
+			assert.True(x.hasTable(0))
+			assert.True(x.hasTable(1))
 		}
 
 		bin := cond.(*sql.Binary)
 		{
 			l := bin.L
 			x := info.info[l]
-			assert.True(x.Has(0))
-			assert.Equal(len(x), 1)
-			assert.True(x[0])
+			assert.True(x.hasTable(0))
+			assert.Equal(x.length(), 1)
+			assert.True(x.hasTable(0))
 		}
 
 		{
 			r := bin.R
 			x := info.info[r]
-			assert.True(x.Has(1))
-			assert.Equal(len(x), 1)
-			assert.True(x[1])
+			assert.True(x.hasTable(1))
+			assert.Equal(x.length(), 1)
+			assert.True(x.hasTable(1))
 		}
 	}
 
@@ -109,26 +109,26 @@ where (f1 == f2)
 
 		{
 			x := info.info[cond]
-			assert.Equal(len(x), 2)
-			assert.True(x[0])
-			assert.True(x[1])
+			assert.Equal(x.length(), 2)
+			assert.True(x.hasTable(0))
+			assert.True(x.hasTable(1))
 		}
 
 		bin := cond.(*sql.Binary)
 		{
 			l := bin.L
 			x := info.info[l]
-			assert.True(x.Has(0))
-			assert.Equal(len(x), 1)
-			assert.True(x[0])
+			assert.True(x.hasTable(0))
+			assert.Equal(x.length(), 1)
+			assert.True(x.hasTable(0))
 		}
 
 		{
 			r := bin.R
 			x := info.info[r]
-			assert.True(x.Has(1))
-			assert.Equal(len(x), 1)
-			assert.True(x[1])
+			assert.True(x.hasTable(1))
+			assert.Equal(x.length(), 1)
+			assert.True(x.hasTable(1))
 		}
 	}
 
@@ -160,12 +160,12 @@ where (f1 == f2 && f2 == (f3 + f4)) || f5
 
 		{
 			x := info.info[cond]
-			assert.Equal(len(x), 5)
-			assert.True(x.Has(0))
-			assert.True(x.Has(1))
-			assert.True(x.Has(2))
-			assert.True(x.Has(3))
-			assert.True(x.Has(4))
+			assert.Equal(x.length(), 5)
+			assert.True(x.hasTable(0))
+			assert.True(x.hasTable(1))
+			assert.True(x.hasTable(2))
+			assert.True(x.hasTable(3))
+			assert.True(x.hasTable(4))
 		}
 	}
 }

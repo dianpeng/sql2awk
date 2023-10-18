@@ -126,43 +126,20 @@ func (self *Plan) isAggFunc(
 	return ty, p.Suffix[0], p.Suffix[0].Call.Parameters[0], nil
 }
 
-func (self *Plan) anaAggExpr(
-	expr sql.Expr,
-) error {
-	switch expr.Type() {
-	default:
-		return nil
-	case sql.ExprPrimary:
-		return self.anaAggExprPrimary(expr.(*sql.Primary))
-	case sql.ExprSuffix:
-		return self.anaAggExprSuffix(expr.(*sql.Suffix))
-	case sql.ExprUnary:
-		return self.anaAggExprUnary(expr.(*sql.Unary))
-	case sql.ExprBinary:
-		return self.anaAggExprBinary(expr.(*sql.Binary))
-	case sql.ExprTernary:
-		return self.anaAggExprTernary(expr.(*sql.Ternary))
-	}
+type visitorTransAgg struct {
+	p *Plan
 }
 
-func (self *Plan) anaAggExprPrimary(
+func (self *visitorTransAgg) AcceptPrimary(
 	primary *sql.Primary,
-) error {
-	ty, inner, target, err := self.isAggFunc(primary)
+) (bool, error) {
+	ty, inner, target, err := self.p.isAggFunc(primary)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if ty == -1 {
-		if err := self.anaAggExpr(primary.Leading); err != nil {
-			return err
-		}
-		for _, x := range primary.Suffix {
-			if err := self.anaAggExpr(x); err != nil {
-				return err
-			}
-		}
-		return nil
+		return true, nil
 	}
 
 	// 1) record agg expression
@@ -172,8 +149,8 @@ func (self *Plan) anaAggExprPrimary(
 		Target:  target,
 	}
 
-	idx := len(self.aggExpr)
-	self.aggExpr = append(self.aggExpr, avar)
+	idx := len(self.p.aggExpr)
+	self.p.aggExpr = append(self.p.aggExpr, avar)
 
 	// 2) mutate the current primary node's CanName
 	primary.CanName.Set(
@@ -181,50 +158,40 @@ func (self *Plan) anaAggExprPrimary(
 		idx,
 	)
 
-	return nil
+	return false, nil
 }
 
-func (self *Plan) anaAggExprSuffix(
-	suffix *sql.Suffix,
-) error {
-	switch suffix.Ty {
-	case sql.SuffixCall:
-		for _, x := range suffix.Call.Parameters {
-			if err := self.anaAggExpr(x); err != nil {
-				return err
-			}
-		}
-		return nil
-	case sql.SuffixIndex:
-		return self.anaAggExpr(suffix.Index)
-	default:
-		return nil
-	}
+func (self *visitorTransAgg) AcceptConst(*sql.Const) (bool, error) {
+	return true, nil
 }
 
-func (self *Plan) anaAggExprUnary(
-	unary *sql.Unary,
-) error {
-	return self.anaAggExpr(unary.Operand)
+func (self *visitorTransAgg) AcceptRef(*sql.Ref) (bool, error) {
+	return true, nil
 }
 
-func (self *Plan) anaAggExprBinary(
-	binary *sql.Binary,
-) error {
-	if err := self.anaAggExpr(binary.L); err != nil {
-		return err
-	}
-	return self.anaAggExpr(binary.R)
+func (self *visitorTransAgg) AcceptSuffix(*sql.Suffix) (bool, error) {
+	return true, nil
 }
 
-func (self *Plan) anaAggExprTernary(
-	ternary *sql.Ternary,
+func (self *visitorTransAgg) AcceptTernary(*sql.Ternary) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorTransAgg) AcceptBinary(*sql.Binary) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorTransAgg) AcceptUnary(*sql.Unary) (bool, error) {
+	return true, nil
+}
+
+func (self *Plan) anaAggExpr(
+	expr sql.Expr,
 ) error {
-	if err := self.anaAggExpr(ternary.Cond); err != nil {
-		return err
-	}
-	if err := self.anaAggExpr(ternary.B0); err != nil {
-		return err
-	}
-	return self.anaAggExpr(ternary.B1)
+	return sql.VisitExprPreOrder(
+		&visitorTransAgg{
+			p: self,
+		},
+		expr,
+	)
 }

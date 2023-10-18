@@ -122,7 +122,7 @@ func (self *earlyFilterAnalyzer) doToStatus(expr sql.Expr) int {
 	if set := self.info.setOrNil(expr); set == nil {
 		return anaEFStatic
 	} else {
-		if set.Single() && set.Has(self.tidx) {
+		if set.Single() && set.hasTable(self.tidx) {
 			return anaEFKnown
 		} else if set.Static() {
 			return anaEFStatic
@@ -228,65 +228,62 @@ func (self *earlyFilterAnalyzer) prune() sql.Expr {
 	return cond
 }
 
-func (self *earlyFilterAnalyzer) resetCanNameRef(
-	x *sql.Ref,
-) {
-	x.CanName.SetName(x.Id)
+type visitorEarlyFilterResetCanName struct {
 }
 
-func (self *earlyFilterAnalyzer) resetCanNamePrimary(
-	x *sql.Primary,
-) {
-	if x.CanName.IsTableColumn() {
-		x.CanName.SetName(x.Suffix[0].Component)
-	}
+func (self *visitorEarlyFilterResetCanName) AcceptRef(
+	ref *sql.Ref,
+) (bool, error) {
+	ref.CanName.SetName(ref.Id)
+	return true, nil
+}
 
-	for _, suff := range x.Suffix {
-		self.resetCanName(suff)
+func (self *visitorEarlyFilterResetCanName) AcceptPrimary(
+	primary *sql.Primary,
+) (bool, error) {
+	if primary.CanName.IsTableColumn() {
+		primary.CanName.SetName(primary.Suffix[0].Component)
 	}
+	return true, nil
+}
+
+func (self *visitorEarlyFilterResetCanName) AcceptConst(
+	*sql.Const,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorEarlyFilterResetCanName) AcceptSuffix(
+	*sql.Suffix,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorEarlyFilterResetCanName) AcceptBinary(
+	*sql.Binary,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorEarlyFilterResetCanName) AcceptTernary(
+	*sql.Ternary,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorEarlyFilterResetCanName) AcceptUnary(
+	*sql.Unary,
+) (bool, error) {
+	return true, nil
 }
 
 func (self *earlyFilterAnalyzer) resetCanName(
 	x sql.Expr,
 ) {
-	if x == nil {
-		return
-	}
-	switch x.Type() {
-	default:
-		break
-	case sql.ExprRef:
-		self.resetCanNameRef(x.(*sql.Ref))
-		break
-	case sql.ExprPrimary:
-		self.resetCanNamePrimary(x.(*sql.Primary))
-		break
-	case sql.ExprSuffix:
-		suff := x.(*sql.Suffix)
-		switch suff.Ty {
-		case sql.SuffixCall:
-			for _, xx := range suff.Call.Parameters {
-				self.resetCanName(xx)
-			}
-			break
-		case sql.SuffixIndex:
-			self.resetCanName(suff.Index)
-			break
-		default:
-			break
-		}
-		break
-	case sql.ExprUnary:
-		self.resetCanName(x.(*sql.Unary).Operand)
-		break
-	case sql.ExprBinary:
-		self.resetCanName(x.(*sql.Binary).L)
-		self.resetCanName(x.(*sql.Binary).R)
-		break
-	case sql.ExprTernary:
-		self.resetCanName(x.(*sql.Ternary).Cond)
-		self.resetCanName(x.(*sql.Ternary).B0)
-		self.resetCanName(x.(*sql.Ternary).B1)
-		break
+	if x != nil {
+		sql.VisitExprPreOrder(
+			&visitorEarlyFilterResetCanName{},
+			x,
+		)
 	}
 }

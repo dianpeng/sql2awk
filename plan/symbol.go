@@ -81,22 +81,26 @@ func (self *Plan) scanTable(s *sql.Select) error {
 	return nil
 }
 
-func (self *Plan) resolveSymbolExprSuffix(
+type visitorResolveSymbol struct {
+	p *Plan
+}
+
+func (self *visitorResolveSymbol) resolveSymbolExprSuffix(
 	leading sql.Expr,
 	component string,
 	cn *sql.CanName,
 ) error {
 	if leading.Type() != sql.ExprRef {
-		return self.err("resolve-symbol", "unknown full table qualified column name")
+		return self.p.err("resolve-symbol", "unknown full table qualified column name")
 	}
 	tableName := leading.(*sql.Ref).Id // table name
-	colIdx := self.codx(component)     // column index
+	colIdx := self.p.codx(component)   // column index
 	if colIdx < 0 {
-		return self.err("resolve-symbol", "invalid field name, must be $XX")
+		return self.p.err("resolve-symbol", "invalid field name, must be $XX")
 	}
-	tableDesp := self.findTableDescriptorByAlias(tableName)
+	tableDesp := self.p.findTableDescriptorByAlias(tableName)
 	if tableDesp == nil {
-		return self.err("resolve-symbol", "unknown table: %s", tableName)
+		return self.p.err("resolve-symbol", "unknown table: %s", tableName)
 	}
 
 	cn.Set(tableDesp.Index, colIdx)
@@ -104,7 +108,7 @@ func (self *Plan) resolveSymbolExprSuffix(
 	return nil
 }
 
-func (self *Plan) resolveSymbolExprSuffixDot(
+func (self *visitorResolveSymbol) resolveSymbolExprSuffixDot(
 	dotPrimary *sql.Primary,
 ) error {
 	return self.resolveSymbolExprSuffix(
@@ -114,124 +118,93 @@ func (self *Plan) resolveSymbolExprSuffixDot(
 	)
 }
 
-func (self *Plan) resolveSymbolExprSuffixIndex(
+func (self *visitorResolveSymbol) resolveSymbolExprSuffixIndex(
 	dotPrimary *sql.Primary,
 ) error {
-	return self.err("resolve-symbol", "cannot use []/index operator here in projection")
+	return self.p.err("resolve-symbol", "cannot use []/index operator here in projection")
 }
 
-func (self *Plan) resolveSymbolExprRef(
+func (self *visitorResolveSymbol) AcceptRef(
 	ref *sql.Ref,
-) error {
-
-	if colIdx := self.codx(ref.Id); colIdx >= 0 {
-		self.tableList[0].UpdateColumnIndex(colIdx)
+) (bool, error) {
+	if colIdx := self.p.codx(ref.Id); colIdx >= 0 {
+		self.p.tableList[0].UpdateColumnIndex(colIdx)
 		ref.CanName.Set(0, colIdx)
 	}
+	return true, nil
+}
 
-	// leave it as it is, since the *as/alias* will also need to resolve *after*
-	// this resolution
-	return nil
+func (self *visitorResolveSymbol) AcceptConst(
+	*sql.Const,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorResolveSymbol) AcceptUnary(
+	*sql.Unary,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorResolveSymbol) AcceptBinary(
+	*sql.Binary,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorResolveSymbol) AcceptTernary(
+	*sql.Ternary,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorResolveSymbol) AcceptPrimary(
+	primary *sql.Primary,
+) (bool, error) {
+	if len(primary.Suffix) >= 2 {
+		// this is impossible for now, since our SQL does not allow list/map
+		// compound type and subscript of these types
+		return false, self.p.err("resolve-symbol", "invalid suffix expression nesting")
+	}
+
+	if len(primary.Suffix) == 1 {
+		suff := primary.Suffix[0]
+		switch suff.Ty {
+		case sql.SuffixDot:
+			// a dotish reference, treat it as a qualified table column reference
+			if err := self.resolveSymbolExprSuffixDot(primary); err != nil {
+				return false, err
+			}
+			break
+		case sql.SuffixIndex:
+			// a indexish reference, treat it as a qualified table column reference
+			if err := self.resolveSymbolExprSuffixIndex(primary); err != nil {
+				return false, err
+			}
+			break
+		default:
+			break
+		}
+	}
+
+	return true, nil
+}
+
+func (self *visitorResolveSymbol) AcceptSuffix(
+	*sql.Suffix,
+) (bool, error) {
+	return true, nil
 }
 
 func (self *Plan) resolveSymbolExpr(
 	expr sql.Expr,
 ) error {
-	switch expr.Type() {
-	default:
-		break
-
-	case sql.ExprRef:
-		ref := expr.(*sql.Ref)
-		if err := self.resolveSymbolExprRef(ref); err != nil {
-			return err
-		}
-		break
-
-	case sql.ExprSuffix:
-		suffix := expr.(*sql.Suffix)
-		switch suffix.Ty {
-		case sql.SuffixCall:
-			for _, x := range suffix.Call.Parameters {
-				if err := self.resolveSymbolExpr(x); err != nil {
-					return err
-				}
-			}
-			break
-
-		case sql.SuffixIndex:
-			return self.resolveSymbolExpr(suffix.Index)
-
-		default:
-			break
-		}
-		break
-
-	case sql.ExprPrimary:
-		primary := expr.(*sql.Primary)
-
-		if len(primary.Suffix) >= 2 {
-			// this is impossible for now, since our SQL does not allow list/map
-			// compound type and subscript of these types
-			return self.err("resolve-symbol", "invalid suffix expression nesting")
-		}
-
-		if len(primary.Suffix) == 1 {
-			suff := primary.Suffix[0]
-			switch suff.Ty {
-			case sql.SuffixDot:
-				// a dotish reference, treat it as a qualified table column reference
-				if err := self.resolveSymbolExprSuffixDot(primary); err != nil {
-					return err
-				}
-				break
-			case sql.SuffixIndex:
-				// a indexish reference, treat it as a qualified table column reference
-				if err := self.resolveSymbolExprSuffixIndex(primary); err != nil {
-					return err
-				}
-				break
-			default:
-				// do nothing for the leading part of the call, the leading part must be
-				// a ref though
-				if err := self.resolveSymbolExpr(suff); err != nil {
-					return err
-				}
-				break
-			}
-		} else {
-			return self.resolveSymbolExpr(primary.Leading)
-		}
-		break
-
-	case sql.ExprUnary:
-		unary := expr.(*sql.Unary)
-		return self.resolveSymbolExpr(unary.Operand)
-
-	case sql.ExprBinary:
-		binary := expr.(*sql.Binary)
-		if err := self.resolveSymbolExpr(binary.L); err != nil {
-			return err
-		}
-		if err := self.resolveSymbolExpr(binary.R); err != nil {
-			return err
-		}
-		break
-
-	case sql.ExprTernary:
-		ternary := expr.(*sql.Ternary)
-		if err := self.resolveSymbolExpr(ternary.Cond); err != nil {
-			return err
-		}
-		if err := self.resolveSymbolExpr(ternary.B0); err != nil {
-			return err
-		}
-		if err := self.resolveSymbolExpr(ternary.B1); err != nil {
-			return err
-		}
-		break
-	}
-	return nil
+	return sql.VisitExprPreOrder(
+		&visitorResolveSymbol{
+			p: self,
+		},
+		expr,
+	)
 }
 
 func (self *Plan) canonicalize(s *sql.Select) error {
@@ -240,7 +213,8 @@ func (self *Plan) canonicalize(s *sql.Select) error {
 	//    the alias afterwards
 
 	// 1.1) Projections
-	if len(s.Projection.ValueList) == 1 && s.Projection.ValueList[0].Type() == sql.SelectVarStar {
+	if len(s.Projection.ValueList) == 1 &&
+		s.Projection.ValueList[0].Type() == sql.SelectVarStar {
 		// quick check for *star* style select, ie select * from xxxxx, etc ...
 		// we will have to update *all*
 		for _, x := range self.tableList {
@@ -322,75 +296,78 @@ func (self *Plan) resolveAliasId(id string, cn *sql.CanName) error {
 	return nil
 }
 
+type visitorAlias struct {
+	p *Plan
+}
+
+func (self *visitorAlias) AcceptRef(
+	ref *sql.Ref,
+) (bool, error) {
+	if err := self.p.resolveAliasId(ref.Id, &ref.CanName); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (self *visitorAlias) AcceptPrimary(
+	primary *sql.Primary,
+) (bool, error) {
+	if suff := primary.Suffix[0]; suff.Ty == sql.SuffixCall {
+		// NOTES(dpeng):
+		//   We only want to *partially* visit the expression instead of fully,
+		//   so we do the visiting by ourself instead of letting the visitor do so
+		if err := sql.VisitExprPreOrder(
+			&visitorAlias{
+				p: self.p,
+			},
+			suff,
+		); err != nil {
+			return false, err
+		}
+	}
+
+	// do not visit primary expression
+	return false, nil
+}
+
+func (self *visitorAlias) AcceptConst(
+	*sql.Const,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorAlias) AcceptSuffix(
+	*sql.Suffix,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorAlias) AcceptUnary(
+	*sql.Unary,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorAlias) AcceptBinary(
+	*sql.Binary,
+) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorAlias) AcceptTernary(
+	*sql.Ternary,
+) (bool, error) {
+	return true, nil
+}
+
 // FIXME(dpeng): implement visitor for AST
 func (self *Plan) resolveAliasExpr(expr sql.Expr) error {
-	switch expr.Type() {
-	default:
-		break
-
-	case sql.ExprRef:
-		ref := expr.(*sql.Ref)
-		if err := self.resolveAliasId(ref.Id, &ref.CanName); err != nil {
-			return err
-		}
-		break
-
-	case sql.ExprSuffix:
-		suffix := expr.(*sql.Suffix)
-		switch suffix.Ty {
-		case sql.SuffixCall:
-			for _, x := range suffix.Call.Parameters {
-				if err := self.resolveAliasExpr(x); err != nil {
-					return err
-				}
-			}
-			break
-
-		case sql.SuffixIndex:
-			return self.resolveAliasExpr(suffix.Index)
-
-		default:
-			break
-		}
-		break
-
-	case sql.ExprPrimary:
-		// call requires resolution
-		primary := expr.(*sql.Primary)
-		suff := primary.Suffix[0]
-		if suff.Ty == sql.SuffixCall {
-			return self.resolveAliasExpr(suff)
-		}
-		break
-
-	case sql.ExprUnary:
-		unary := expr.(*sql.Unary)
-		return self.resolveAliasExpr(unary.Operand)
-
-	case sql.ExprBinary:
-		binary := expr.(*sql.Binary)
-		if err := self.resolveAliasExpr(binary.L); err != nil {
-			return err
-		}
-		if err := self.resolveAliasExpr(binary.R); err != nil {
-			return err
-		}
-		break
-
-	case sql.ExprTernary:
-		ternary := expr.(*sql.Ternary)
-		if err := self.resolveAliasExpr(ternary.Cond); err != nil {
-			return err
-		}
-		if err := self.resolveAliasExpr(ternary.B0); err != nil {
-			return err
-		}
-		if err := self.resolveAliasExpr(ternary.B1); err != nil {
-			return err
-		}
-		break
-	}
-	return nil
+	return sql.VisitExprPreOrder(
+		&visitorAlias{
+			p: self,
+		},
+		expr,
+	)
 }
 
 func (self *Plan) resolveAlias(s *sql.Select) error {
