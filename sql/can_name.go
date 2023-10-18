@@ -72,18 +72,10 @@ func (self *CanName) SetName(
 	self.Name = name
 }
 
-func (self *CanName) SetGlobal() {
-	self.Type = CanNameGlobal
-}
-
-func (self *CanName) IsGlobal() bool {
-	return self.Type == CanNameGlobal
-}
-
-func (self *CanName) IsExpr() bool {
-	return self.Type == CanNameExpr
-}
-
+func (self *CanName) SetGlobal()     { self.Type = CanNameGlobal }
+func (self *CanName) IsName() bool   { return self.Type == CanNameName }
+func (self *CanName) IsGlobal() bool { return self.Type == CanNameGlobal }
+func (self *CanName) IsExpr() bool   { return self.Type == CanNameExpr }
 func (self *CanName) IsReference() bool {
 	return self.IsSettled() && self.Reference != nil
 }
@@ -91,14 +83,8 @@ func (self *CanName) IsReference() bool {
 func (self *CanName) IsTableColumn() bool {
 	return self.Type == CanNameTableColumn
 }
-
-func (self *CanName) IsSettled() bool {
-	return self.Type != CanNameFree
-}
-
-func (self *CanName) IsFree() bool {
-	return self.Type == CanNameFree
-}
+func (self *CanName) IsSettled() bool { return self.Type != CanNameFree }
+func (self *CanName) IsFree() bool    { return self.Type == CanNameFree }
 
 func (self *CanName) Reset() {
 	self.Reference = nil

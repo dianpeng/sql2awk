@@ -139,6 +139,47 @@ function asorti_rev(input, out, tmp_out, local_l, i) {
   }
   return local_l;
 }
+
+# ------------------------------------------------------------------------
+#
+# Notes, the following function can be used by user's SQL
+#   The sql analyzer will rewrite any possible function call into prefixed
+#   version which allows user to call runtime function correctly
+#
+# ------------------------------------------------------------------------
+function sql2awk_is_decimal(v) { return is_decimal(v); }
+function sql2awk_is_integer(v) { return is_integer(v); }
+function sql2awk_is_number(v) { return is_number(v); }
+function sql2awk_is_string(v) { return is_string(v); }
+function sql2awk_is_null(v) { return is_null(v); }
+function sql2awk_type(v) { return type(v); }
+function sql2awk_cast(v, ty) { return cast(v, ty); }
+
+function sql2awk_length(v) { return length(v); }
+function sql2awk_to_lower(v) { return tolower(v); }
+function sql2awk_to_upper(v) { return toupper(v); }
+function sql2awk_substr(a, b, c) { return substr(a, b, c); }
+
+function sql2awk_math_cos(a) { return cos(a); }
+function sql2awk_math_sin(a) { return sin(a); }
+function sql2awk_math_sqrt(a) { return sqrt(a); }
+function sql2awk_math_exp(a) { return exp(a); }
+function sql2awk_math_int(a) { return int(a); }
+function sql2awk_math_log(a) { return log(a); }
+function sql2awk_math_atan2(a, b) { return atan2(a, b); }
+
+function sql2awk_default(v, defv) {
+  if (is_null(v)) {
+    return defv;
+  } else {
+    return v;
+  }
+}
+
+function sql2awk_regexp_is_match(a, b) {
+  return match(a, b) != 0;
+}
+
 `
 
 const builtinGoAWK = `

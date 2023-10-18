@@ -103,10 +103,29 @@ func (self *exprCodeGen) genRef(
 	}
 }
 
+func (self *exprCodeGen) functionName(
+	primary *sql.Primary,
+) string {
+	if primary.Leading.Type() == sql.ExprRef &&
+		len(primary.Suffix) >= 1 &&
+		primary.Suffix[0].Ty == sql.SuffixCall {
+		name := primary.Leading.(*sql.Ref)
+		if name.CanName.IsFree() || name.CanName.IsName() {
+			return fmt.Sprintf("sql2awk_%s", name.Id)
+		}
+	}
+	return ""
+}
+
 func (self *exprCodeGen) genPrimaryFree(
 	primary *sql.Primary,
 ) {
-	self.genExpr(primary.Leading)
+	if n := self.functionName(primary); n != "" {
+		self.o.WriteString(n)
+	} else {
+		self.genExpr(primary.Leading)
+	}
+
 	for _, x := range primary.Suffix {
 		self.genSuffix(x)
 	}
