@@ -20,8 +20,8 @@ const (
 )
 
 const (
-	defMaxColumnSize = 60
-	defMaxTableSize  = 10
+	defMaxColumnSize = 600
+	defMaxTableSize  = 100
 )
 
 func aggTypeToName(i int) string {
