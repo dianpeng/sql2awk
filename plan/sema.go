@@ -1,5 +1,9 @@
 package plan
 
+import (
+	"github.com/dianpeng/sql2awk/sql"
+)
+
 // Semantic checking, just check obvious sql semantic bugs
 
 // ----------------------------------------------------------------------------
@@ -20,56 +24,7 @@ package plan
 //     is not expected
 //
 // ----------------------------------------------------------------------------
-
-/*
-
-type visitorHasAgg struct {
-	hasAgg bool
-}
-
-func (self *visitorHasAgg) AcceptConst(*sql.Const) (bool, error) {
-	return true, nil
-}
-
-func (self *visitorHasAgg) AcceptRef(*sql.Ref) (bool, error) {
-	return true, nil
-}
-
-func (self *visitorHasAgg) AcceptSuffix(*sql.Suffix) (bool, error) {
-	return true, nil
-}
-
-func (self *visitorHasAgg) AcceptPrimary(*sql.Primary) (bool, error) {
-	idx, _, _, _ := self.isAggFunc(primary)
-	if idx < 0 {
-		return true, nil
-	} else {
-		self.hasAgg = true
-		return false, nil
-	}
-}
-
-func (self *visitorHasAgg) AcceptTernary(*sql.Ternary) (bool, error) {
-	return true, nil
-}
-
-func (self *visitorHasAgg) AcceptBinary(*sql.Binary) (bool, error) {
-	return true, nil
-}
-
-func (self *visitorHasAgg) AcceptUnary(*sql.Unary) (bool, error) {
-	return true, nil
-}
-
-func (self *Plan) exprHasAgg(
-	expr sql.Expr,
-) bool {
-	v := &visitorHasAgg{}
-	sql.VisitExprPreOrder(v, expr)
-	return v.hasAgg
-}
-
-func (self *Plan) anaGroupBy(s *sql.Select) error {
+func (self *Plan) semaCheckGroupBy(s *sql.Select) error {
 	groupBy := s.GroupBy
 	if groupBy != nil {
 		groupByInfo := newExprTableAccessSet()
@@ -77,9 +32,9 @@ func (self *Plan) anaGroupBy(s *sql.Select) error {
 		// check all the group by expression should not have aggregation
 		for idx, v := range groupBy.Name {
 			if self.exprHasAgg(v) {
-				return self.err("sema", "[group_by]: $d'th expression has aggregation", idx)
+				return self.err("sema", "[group_by]: %d'th expression has aggregation", idx)
 			}
-			groupByInfo.union(newExprTableAccessInfo(v).info)
+			groupByInfo.union(getExprTableAccessSet(v))
 		}
 
 		// check all the accessed vars, that is not showed up inside of the agg must
@@ -89,11 +44,11 @@ func (self *Plan) anaGroupBy(s *sql.Select) error {
 
 			// collect all the projection value's table and field access info notes
 			// this result in a set of sets
-			for idx, v := range s.Projection.ValueList {
+			for _, v := range s.Projection.ValueList {
 				if col, ok := v.(*sql.Col); ok {
 					// check whether the Col's expression is aggregation or not
 					if !self.exprHasAgg(col.Value) {
-						projectInfo.union(newExprTableAccessInfo(col.Value).info)
+						projectInfo.union(getExprTableAccessSet(col.Value))
 					}
 				}
 			}
@@ -103,35 +58,77 @@ func (self *Plan) anaGroupBy(s *sql.Select) error {
 			if !groupByInfo.contain(projectInfo) {
 				return self.err(
 					"sema",
-					"[group_by]: projected variable that is not in aggregation must be in group by",
+					"[group_by]: projected variable that is not in aggregation must "+
+						"be in group by",
 				)
 			}
 		}
 	} else {
 		// if there's no group by, then all the projection variable must be in
 		// aggregation format, otherwise invalid
-		hasAgg := false
-		hasNoneAgg := false
-
-		for idx, v := range s.Projection.ValueList {
-			if col, ok := v.(*sql.Col); ok {
-				// check whether the Col's expression is aggregation or not
-				if self.exprHasAgg(col.Value) {
-					hasAgg = true
-				} else {
-					hasNoneAgg = true
-				}
-			}
-		}
+		hasAgg, hasNoneAgg := self.semaCheckProjectionAgg(s.Projection)
 
 		if hasAgg && hasNoneAgg {
 			return self.err(
 				"sema",
-				"[group_by]: group by is not specified, so all the projection must be in aggregation",
+				"[group_by]: group by is not specified, but projection var contains "+
+					"mixed aggregation with none aggregation expression",
 			)
 		}
 	}
 	return nil
 }
 
-*/
+func (self *Plan) semaCheckProjectionAgg(
+	projection *sql.Projection,
+) (bool, bool) {
+	hasAgg := false
+	hasNoneAgg := false
+	for _, v := range projection.ValueList {
+		if col, ok := v.(*sql.Col); ok {
+			// check whether the Col's expression is aggregation or not
+			if self.exprHasAgg(col.Value) {
+				hasAgg = true
+			} else {
+				hasNoneAgg = true
+			}
+		}
+	}
+	return hasAgg, hasNoneAgg
+}
+
+func (self *Plan) semaCheckHavingAgg(
+	s *sql.Having,
+) bool {
+	if s == nil {
+		return false
+	}
+	return self.exprHasAgg(s.Condition)
+}
+
+func (self *Plan) semaCheckWildcard(s *sql.Select) error {
+	if s.Projection.HasWildcard() {
+		projectionHasAgg, _ := self.semaCheckProjectionAgg(s.Projection) // projection has agg
+		havingHasAgg := self.semaCheckHavingAgg(s.Having)                // having has agg
+		if havingHasAgg && !projectionHasAgg {
+			return self.err(
+				"sema",
+				"[wildcard]: A none aggregation query with having statement contains "+
+					"aggregation is invalid",
+			)
+		}
+	}
+
+	return nil
+}
+
+func (self *Plan) semaCheck(s *sql.Select) error {
+	if err := self.semaCheckGroupBy(s); err != nil {
+		return err
+	}
+	if err := self.semaCheckWildcard(s); err != nil {
+		return err
+	}
+
+	return nil
+}

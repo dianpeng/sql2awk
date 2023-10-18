@@ -160,6 +160,11 @@ func newExprTableAccessInfo(root sql.Expr) *exprTableAccessInfo {
 	return info
 }
 
+func getExprTableAccessSet(x sql.Expr) *exprTableAccessSet {
+	info := newExprTableAccessInfo(x)
+	return info.s(x)
+}
+
 func (self *exprTableAccessInfo) s(expr sql.Expr) *exprTableAccessSet {
 	r, ok := self.info[expr]
 	if !ok {

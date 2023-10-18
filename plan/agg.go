@@ -195,3 +195,52 @@ func (self *Plan) anaAggExpr(
 		expr,
 	)
 }
+
+type visitorHasAgg struct {
+	p      *Plan
+	hasAgg bool
+}
+
+func (self *visitorHasAgg) AcceptConst(*sql.Const) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorHasAgg) AcceptRef(*sql.Ref) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorHasAgg) AcceptSuffix(*sql.Suffix) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorHasAgg) AcceptPrimary(primary *sql.Primary) (bool, error) {
+	idx, _, _, _ := self.p.isAggFunc(primary)
+	if idx < 0 {
+		return true, nil
+	} else {
+		self.hasAgg = true
+		return false, nil
+	}
+}
+
+func (self *visitorHasAgg) AcceptTernary(*sql.Ternary) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorHasAgg) AcceptBinary(*sql.Binary) (bool, error) {
+	return true, nil
+}
+
+func (self *visitorHasAgg) AcceptUnary(*sql.Unary) (bool, error) {
+	return true, nil
+}
+
+func (self *Plan) exprHasAgg(
+	expr sql.Expr,
+) bool {
+	v := &visitorHasAgg{
+		p: self,
+	}
+	sql.VisitExprPreOrder(v, expr)
+	return v.hasAgg
+}

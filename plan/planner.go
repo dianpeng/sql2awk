@@ -13,6 +13,11 @@ func (self *Plan) planPrepare(s *sql.Select) error {
 
 	// 2) analyze aggregation
 	self.anaAgg(s)
+
+	// 3) perform semantic check
+	if err := self.semaCheck(s); err != nil {
+		return err
+	}
 	return nil
 }
 
