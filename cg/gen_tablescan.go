@@ -28,6 +28,9 @@ const tableScanTemplate = `
     {{if not .FullColumn }}
     field_count_tt = {{.MaxColumn}} < NF ? {{.MaxColumn}} : NF;
     {{end}}
+    if ({{.VarTableField}} < field_count_tt) {
+      {{.VarTableField}} = field_count_tt;
+    }
     {{.VarTableField}} = field_count_tt;
     for (i = 1; i <= field_count_tt; i++) {
       {{.VarTable}}[row_idx, i] = $i;
