@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -371,6 +372,17 @@ func (self *cookbook) genAwk() error {
 		return fmt.Errorf("[plan]: %s", err)
 	}
 	self.code = code
+
+	if save := self.parsed.getOne("save"); save != nil {
+		if path := save.attrAt("path"); path != "" {
+			if err := saveToTmp(
+				path,
+				self.code,
+			); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
@@ -430,8 +442,14 @@ func (self *cookbook) runSysAwk() error {
 	return nil
 }
 
+func (self *cookbook) shouldRunAwk() bool {
+	return self.parsed.getOne("result") != nil ||
+		self.parsed.getOne("verify") != nil
+}
+
 func (self *cookbook) runAwk() error {
-	if verify := self.parsed.getOne("result"); verify != nil {
+
+	if self.shouldRunAwk() {
 		if self.useGoAwk {
 			if err := self.runGoAwk(); err != nil {
 				return err
@@ -441,14 +459,8 @@ func (self *cookbook) runAwk() error {
 				return err
 			}
 		}
-	} else if save := self.parsed.getOne("save"); save != nil {
-		if path := save.attrAt("path"); path != "" {
-			return saveToTmp(
-				path,
-				self.code,
-			)
-		}
 	}
+
 	return nil
 }
 
@@ -543,6 +555,44 @@ func (self *cookbook) verify() error {
 				self.result,
 				err,
 			)
+		}
+	} else if yy := self.parsed.getOne("verify"); yy != nil {
+
+		if x := yy.attrAt("size"); x != "" {
+			if sz, err := strconv.Atoi(x); err != nil {
+				return err
+			} else {
+				rList := self.toOrderList(self.result)
+				if len(rList) != sz {
+					return fmt.Errorf(
+						"[plan]: verify(size) failed(%d != %d",
+						len(rList),
+						sz,
+					)
+				}
+			}
+		}
+
+		if x := yy.attrAt("field"); x != "" {
+			if sz, err := strconv.Atoi(x); err != nil {
+				return err
+			} else {
+				rList := self.toOrderList(self.result)
+				if len(rList) == 0 {
+					return fmt.Errorf(
+						"[plan]: verify(field) failed(empty table)",
+					)
+				}
+				cSz := len(rList[0])
+
+				if cSz != sz {
+					return fmt.Errorf(
+						"[plan]: verify(field) failed(%d != %d)",
+						cSz,
+						sz,
+					)
+				}
+			}
 		}
 	}
 	return nil
