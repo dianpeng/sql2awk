@@ -23,7 +23,7 @@ where foo(f1, f2)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 		assert.True(p.anaAgg(s) == nil)
 		assert.True(p.HasAgg())
@@ -67,7 +67,7 @@ where foo(f1, f2)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 		assert.True(p.anaAgg(s) == nil)
 		assert.True(p.HasAgg())
@@ -111,7 +111,7 @@ where foo(f1, f2)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 		assert.True(p.anaAgg(s) == nil)
 		assert.True(p.HasAgg())
@@ -161,7 +161,7 @@ having max(t2.$10) > 10
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 		assert.True(p.anaAgg(s) == nil)
 		assert.True(p.HasAgg())
@@ -193,7 +193,7 @@ having max(t2.$10 + 1) > 10
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 		assert.True(p.anaAgg(s) == nil)
 		assert.True(p.HasAgg())
@@ -226,7 +226,7 @@ having (max(t2.$10) + 1) > 10
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 		assert.True(p.anaAgg(s) == nil)
 		assert.True(p.HasAgg())
@@ -265,7 +265,7 @@ order by max(t2.$10), avg(t1.$10) asc
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 		assert.True(p.anaAgg(s) == nil)
 		assert.True(p.HasAgg())

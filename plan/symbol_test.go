@@ -32,7 +32,7 @@ from tab("/a/b/1") as t1,
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 
 		{
@@ -84,7 +84,7 @@ from tab("/a/b/c") as t1,
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 		assert.True(
 			p.findTableDescriptorByAlias("t1") != nil,
@@ -114,7 +114,7 @@ where f == 100
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 
 		// the t1 table should be existed
@@ -168,7 +168,7 @@ where f2 == 100
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 
 		// the t1 table should be existed
@@ -224,7 +224,7 @@ where f2 == f1
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 
 		assert.Equal(
@@ -300,7 +300,7 @@ where f2 == t2.$10
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 
 		assert.Equal(
@@ -378,7 +378,7 @@ where foo(f1, f2)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 
 		assert.Equal(
@@ -464,7 +464,7 @@ where foo(t1.$1)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 
 		assert.Equal(
@@ -546,7 +546,7 @@ group by f1, f2, t2.$3
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 
 		assert.Equal(
@@ -634,7 +634,7 @@ order by f1, f2, t2.$3 asc
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 
 		assert.Equal(
@@ -722,7 +722,7 @@ having f1
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 
 		assert.Equal(
@@ -788,7 +788,7 @@ having f2
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 
 		assert.Equal(
@@ -852,7 +852,7 @@ having t2.$10
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s)
+		err := p.scanTableAndResolveSymbol(s)
 		assert.True(err == nil)
 
 		assert.Equal(

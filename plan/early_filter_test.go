@@ -23,7 +23,7 @@ where foo(f1, f2)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 
 		cond := s.Where.Condition
@@ -64,7 +64,7 @@ where 100 != 200
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 
 		cond := s.Where.Condition
@@ -107,7 +107,7 @@ where (f1 == 100 && f2 == 200)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 
 		cond := s.Where.Condition
@@ -147,7 +147,7 @@ where (f1 == f2)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 
 		cond := s.Where.Condition
@@ -185,7 +185,7 @@ where (t1.$1 == t2.$2)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 
 		cond := s.Where.Condition
@@ -223,7 +223,7 @@ where (f1 == 100 && f2 == f1)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 
 		cond := s.Where.Condition
@@ -264,7 +264,7 @@ where (f1 == 100 or f2 == f1)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 
 		cond := s.Where.Condition
@@ -304,7 +304,7 @@ where (f1 == 100 and (f1 == 300 or f1 == 100)) and (f2 == f1 or f2 == 800)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 
 		cond := s.Where.Condition
@@ -348,7 +348,7 @@ where (f1 == 100 or f1 == 200) and f2
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 
 		cond := s.Where.Condition
@@ -396,7 +396,7 @@ where (f1 == f2 and f1 == 200) and (f1 == 400)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 
 		cond := s.Where.Condition
@@ -440,7 +440,7 @@ where (f1 == f2 and f1 == 200) and (f2 == 400)
 		)
 		assert.True(s != nil)
 		p := newPlan()
-		err := p.resolveSymbol(s) // this is required
+		err := p.scanTableAndResolveSymbol(s) // this is required
 		assert.True(err == nil)
 
 		cond := s.Where.Condition

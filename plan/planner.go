@@ -6,15 +6,20 @@ import (
 )
 
 func (self *Plan) planPrepare(s *sql.Select) error {
-	// 1) resolve all the symbols and resolve all the alias
+	// 1) scan table
+	if err := self.scanTable(s); err != nil {
+		return err
+	}
+
+	// 2) resolve all the symbols and resolve all the alias
 	if err := self.resolveSymbol(s); err != nil {
 		return err
 	}
 
-	// 2) analyze aggregation
+	// 3) analyze aggregation
 	self.anaAgg(s)
 
-	// 3) perform semantic check
+	// 4) perform semantic check
 	if err := self.semaCheck(s); err != nil {
 		return err
 	}

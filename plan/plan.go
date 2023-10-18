@@ -54,6 +54,7 @@ type Options []interface{}
 type TableDescriptor struct {
 	Index      int
 	Path       string
+	Params     []*sql.Const
 	Type       string
 	Alias      string // table alias
 	Options    Options

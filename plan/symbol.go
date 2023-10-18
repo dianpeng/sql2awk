@@ -1,85 +1,8 @@
 package plan
 
 import (
-	"fmt"
 	"github.com/dianpeng/sql2awk/sql"
 )
-
-// Try to resolve the symbol inside of the expression tree and generate some
-// correct representation of the SQL tree. Part of the plan
-
-func (self *Plan) genTableDescriptor(
-	idx int,
-	fromVar *sql.FromVar,
-) (*TableDescriptor, error) {
-
-	if len(fromVar.Vars) == 0 || fromVar.Vars[0].Ty != sql.ConstStr {
-		return nil, self.err("resolve-symbol", "table path must be specified")
-	}
-
-	out := &TableDescriptor{
-		Index:      idx,
-		Path:       fromVar.Vars[0].String,
-		Type:       fromVar.Name,
-		Alias:      fromVar.Alias,
-		Options:    constListToOptions(fromVar.Vars[1:]),
-		Symbol:     fmt.Sprintf("tbl_%d", idx),
-		MaxColumn:  -1,
-		Column:     make(map[int]bool),
-		FullColumn: false,
-	}
-
-	return out, nil
-}
-
-func (self *Plan) findTableDescriptorByAlias(
-	alias string,
-) *TableDescriptor {
-	for _, td := range self.tableList {
-		if td.Alias == alias {
-			return td
-		}
-	}
-	return nil
-}
-
-func (self *Plan) indexTableDescriptor(
-	idx int,
-) *TableDescriptor {
-	if idx >= len(self.tableList) {
-		return nil
-	} else {
-		return self.tableList[idx]
-	}
-}
-
-func (self *Plan) scanTable(s *sql.Select) error {
-	if len(s.From.VarList) == 0 {
-		return self.err("resolve-symbol", "no table specified?")
-	}
-
-	tableAlias := make(map[string]bool)
-
-	// iterate through the *from* list to generate needed information
-	for idx, fv := range s.From.VarList {
-		if td, err := self.genTableDescriptor(idx, fv); err != nil {
-			return err
-		} else {
-			if td.Alias != "" {
-				if _, ok := tableAlias[td.Alias]; ok {
-					return self.err("resolve-symbol", "table alias: %s already existed", td.Alias)
-				}
-			}
-			tableAlias[td.Alias] = true
-			self.tableList = append(self.tableList, td)
-		}
-	}
-
-	if len(self.tableList) > self.Config.MaxTableSize {
-		return self.err("resolve-symbol", "too many tables")
-	}
-	return nil
-}
 
 type visitorResolveSymbol struct {
 	p *Plan
@@ -422,20 +345,21 @@ func (self *Plan) resolveAlias(s *sql.Select) error {
 	return nil
 }
 
-func (self *Plan) resolveSymbol(s *sql.Select) error {
-	// 1) generate table descriptor based on FROM clause, and name each table
-	//    accordingly
+func (self *Plan) scanTableAndResolveSymbol(s *sql.Select) error {
 	if err := self.scanTable(s); err != nil {
 		return err
 	}
+	return self.resolveSymbol(s)
+}
 
-	// 2) resolve symbol to its canonicalized name if we can, ie basically resove
+func (self *Plan) resolveSymbol(s *sql.Select) error {
+	// 1) resolve symbol to its canonicalized name if we can, ie basically resove
 	//    any dot suffix expression to be full name
 	if err := self.canonicalize(s); err != nil {
 		return err
 	}
 
-	// 3) resolve symbol's alias or global variables
+	// 2) resolve symbol's alias or global variables
 	if err := self.resolveAlias(s); err != nil {
 		return err
 	}
