@@ -1,7 +1,6 @@
 package cg
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -39,11 +38,9 @@ func (self *groupByCodeGen) genNext() error {
 		for idx, fexpr := range groupBy.VarList {
 			str := self.cg.genExpr(fexpr)
 			self.writer.Assign(
-				"gb_expr%[idx]",
+				self.writer.LocalN("gb_expr", idx),
 				str,
-				map[string]interface{}{
-					"idx": idx,
-				},
+				nil,
 			)
 		}
 
@@ -52,11 +49,11 @@ func (self *groupByCodeGen) genNext() error {
 		buf := []string{}
 		l := len(groupBy.VarList)
 		for i := 0; i < l; i++ {
-			buf = append(buf, fmt.Sprintf("(gb_expr%d\"\")", i))
+			buf = append(buf, self.writer.LocalN("gb_expr", i))
 		}
 
 		self.writer.Assign(
-			"gb_key",
+			self.writer.Local("gb_key"),
 			strings.Join(buf, " "),
 			nil,
 		)
@@ -65,12 +62,12 @@ func (self *groupByCodeGen) genNext() error {
 		{
 			self.writer.Chunk(
 				`
-if (group_by[gb_key] == "") {
-  group_by[gb_key]=1;
-  idx = 0;
+if ($[ga, group_by][$[l, gb_key]] == "") {
+  $[ga, group_by][$[l, gb_key]]=1;
+  $[l, index] = 0;
 } else {
-  idx = group_by[gb_key];
-  group_by[gb_key]++;
+  $[l, index] = $[ga, group_by][$[l, gb_key]];
+  $[ga, group_by][$[l, gb_key]]++;
 }
   `,
 				nil,
@@ -80,7 +77,7 @@ if (group_by[gb_key] == "") {
 		// table value
 		{
 			self.writer.Line(
-				"group_by_index[sprintf(\"%s:%d\", gb_key, idx)] = %[value];",
+				"$[ga, group_by_index][sprintf(\"%s:%d\", $[l, gb_key], $[l, index])] = %[value];",
 				awkWriterCtx{
 					"value": self.writer.ridCommaList(self.cg.tsSize()),
 				},
@@ -109,12 +106,12 @@ func (self *groupByCodeGen) genFlush() error {
 
 		self.writer.Chunk(
 			`
-for (gb_key_tt in group_by) {
-  tt = group_by[gb_key_tt];               # must be a number
-  for (i = 0; i < tt; i++) {              # inner loop
-    key = sprintf("%s:%d", gb_key_tt, i); # get the key
-    val = group_by_index[key];            # get the ',' delimited column size
-    split(val, sep, ",");                 # split the ',' into list of column index
+for ($[l, gb_key_tt] in $[ga, group_by]) {
+  $[l, tt] = $[ga, group_by][$[l, gb_key_tt]];              # must be a number
+  for ($[l, i] = 0; $[l, i] < $[l, tt]; $[l, i]++) {        # inner loop
+    $[l, key] = sprintf("%s:%d", $[l, gb_key_tt], $[l, i]); # get the key
+    $[l, val] = $[ga, group_by_index][$[l, key]];           # get the rid list
+    split($[l, val], $[l, sep], ",");                       # split the ','
   `,
 			nil,
 		)
@@ -123,7 +120,12 @@ for (gb_key_tt in group_by) {
 		arg := []string{}
 		for i := 0; i < self.tsSize; i++ {
 			// separater's index starts with 1, funny
-			arg = append(arg, fmt.Sprintf("sep[%d]", i+1))
+			arg = append(arg, self.writer.Fmt(
+				"$[l, sep][%[idx]]",
+				awkWriterCtx{
+					"idx": i + 1,
+				},
+			))
 		}
 
 		self.writer.Call(
