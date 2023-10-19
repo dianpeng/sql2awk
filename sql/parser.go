@@ -597,7 +597,7 @@ func (self *Parser) parseTernary() (Expr, error) {
 	return cond, nil
 }
 
-const maxOpPrec = 6
+const maxOpPrec = 7
 const invalidOpPrec = -1
 
 func (self *Parser) binPrec(tk int) int {
@@ -606,14 +606,16 @@ func (self *Parser) binPrec(tk int) int {
 		return 0
 	case TkAnd:
 		return 1
-	case TkEq, TkNe:
+	case TkIn, TkBetween, TkNot:
 		return 2
-	case TkLt, TkLe, TkGt, TkGe:
+	case TkEq, TkNe:
 		return 3
-	case TkAdd, TkSub:
+	case TkLt, TkLe, TkGt, TkGe:
 		return 4
-	case TkMul, TkDiv, TkMod:
+	case TkAdd, TkSub:
 		return 5
+	case TkMul, TkDiv, TkMod:
+		return 6
 	default:
 		return invalidOpPrec
 	}
@@ -639,6 +641,57 @@ func (self *Parser) parseBinary() (Expr, error) {
 	return self.doParseBin(0)
 }
 
+func (self *Parser) doParseBinBetweenRHS(
+	prec int,
+) (Expr, Expr, error) {
+	lowerBound, err := self.doParseBin(prec)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if self.L.Token != TkAnd {
+		return nil, nil, self.err("expect AND for BETWEEN operator")
+	}
+	self.L.Next()
+
+	upperBound, err := self.doParseBin(prec)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return lowerBound, upperBound, nil
+}
+
+func (self *Parser) doParseBinInRHS(
+	prec int,
+) ([]Expr, error) {
+	if self.L.Token != TkLPar {
+		return nil, self.err("expect '(' for IN operator's lhs")
+	}
+	self.L.Next()
+
+	out := []Expr{}
+
+	for self.L.Token != TkRPar {
+		if v, err := self.parseExpr(); err != nil {
+			return nil, err
+		} else {
+			out = append(out, v)
+		}
+		if self.L.Token == TkComma {
+			self.L.Next()
+		} else if self.L.Token != TkRPar {
+			return nil, self.err("expect a ',' or ')' after element in IN's lhs")
+		}
+	}
+
+	self.L.Next()
+	if len(out) == 0 {
+		return nil, self.err("IN operator's RHS is an empty set, which is not allowed")
+	}
+	return out, nil
+}
+
 func (self *Parser) doParseBinRest(lhs Expr,
 	prec int,
 	start int,
@@ -650,34 +703,132 @@ func (self *Parser) doParseBinRest(lhs Expr,
 
 		if nextPrec == invalidOpPrec {
 			break
-		}
-
-		if nextPrec < prec {
+		} else if nextPrec < prec {
 			break
 		}
 
-		self.L.Next() // eat the operator token
+		ntk := self.L.Next() // eat the operator token
 
-		rhs, err := self.doParseBin(nextPrec + 1)
-		if err != nil {
-			return nil, err
+		if tk == TkNot {
+			switch ntk {
+			case TkIn:
+				tk = tkNotIn
+				self.L.Next()
+				break
+
+			case TkBetween:
+				tk = tkNotBetween
+				self.L.Next()
+				break
+			default:
+				return nil, self.err(
+					"NOT operator shows up, but expect a suffix operator, " +
+						"example like NOT IN, NOT BETWEEN etcd ... ",
+				)
+			}
 		}
 
-		end := self.posEnd()
+		var newNode Expr
+		switch tk {
+		case TkBetween, tkNotBetween:
+			if lower, upper, err := self.doParseBinBetweenRHS(nextPrec + 1); err != nil {
+				return nil, err
+			} else {
+				ge := &Binary{
+					Op:       TkGe,
+					L:        lhs,
+					R:        lower,
+					CodeInfo: self.currentCodeInfo(start),
+				}
 
-		newNode := &Binary{
-			Op: tk,
-			L:  lhs,
-			R:  rhs,
-			CodeInfo: CodeInfo{
-				Start:   start,
-				End:     end,
-				Snippet: self.snippet(start, end),
-			},
+				le := &Binary{
+					Op:       TkLe,
+					L:        lhs,
+					R:        upper,
+					CodeInfo: self.currentCodeInfo(start),
+				}
+
+				between := &Binary{
+					Op:       TkAnd,
+					L:        ge,
+					R:        le,
+					CodeInfo: self.currentCodeInfo(start),
+				}
+
+				if tk == TkBetween {
+					newNode = between
+				} else {
+					newNode = &Unary{
+						Op:       []int{TkNot},
+						Operand:  between,
+						CodeInfo: self.currentCodeInfo(start),
+					}
+				}
+			}
+			break
+
+		case TkIn, tkNotIn:
+			if v, err := self.doParseBinInRHS(nextPrec + 1); err != nil {
+				return nil, err
+			} else {
+				var out Expr
+
+				for _, vv := range v {
+					eq := &Binary{
+						Op:       TkEq,
+						L:        lhs,
+						R:        vv,
+						CodeInfo: self.currentCodeInfo(start),
+					}
+
+					if out == nil {
+						out = eq
+					} else {
+						out = &Binary{
+							Op:       TkOr,
+							L:        out,
+							R:        eq,
+							CodeInfo: self.currentCodeInfo(start),
+						}
+					}
+				}
+
+				if out == nil {
+					out = &Const{
+						Ty:       ConstBool,
+						Bool:     false,
+						CodeInfo: self.currentCodeInfo(start),
+					}
+				}
+
+				if tk == tkNotIn {
+					newNode = &Unary{
+						Op:       []int{TkNot},
+						Operand:  out,
+						CodeInfo: self.currentCodeInfo(start),
+					}
+				} else {
+					newNode = out
+				}
+			}
+			break
+
+		default:
+			if v, err := self.doParseBin(nextPrec + 1); err != nil {
+				return nil, err
+			} else {
+				newNode = &Binary{
+					Op:       tk,
+					L:        lhs,
+					R:        v,
+					CodeInfo: self.currentCodeInfo(start),
+				}
+			}
+			break
 		}
 
 		lhs = newNode
-		start = end
+		start = self.posEnd()
 	}
 
 	return lhs, nil

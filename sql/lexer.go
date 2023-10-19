@@ -31,6 +31,17 @@ const (
 	TkLimit
 	TkHaving
 	TkDistinct
+	TkIn
+	TkBetween
+	TkDefault
+	TkCase
+	TkIf
+	TkElse
+	TkThen
+	TkEnd
+	TkFormat
+	TkRewrite
+	TkOutput
 
 	// Punctuation
 	TkComma
@@ -67,6 +78,11 @@ const (
 
 	TkError
 	TkEof
+
+	// Special hidden tokens that will never showsup during lexing, used inside
+	// of parser for preprocessing/desugar purpose
+	tkNotBetween
+	tkNotIn
 )
 
 type Lexeme struct {
@@ -460,16 +476,36 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 			return true, self.yield(TkAs, 2)
 		}
 		break
+	case 'b', 'B':
+		if self.matchKeyword("etween") {
+			return true, self.yield(TkBetween, 7)
+		}
+		break
 
 	case 'c', 'C':
 		if self.matchKeyword("ast") {
 			return true, self.yield(TkCast, 4)
+		}
+		if self.matchKeyword("ase") {
+			return true, self.yield(TkCase, 4)
 		}
 		break
 
 	case 'd', 'D':
 		if self.matchKeyword("istinct") {
 			return true, self.yield(TkDistinct, 8)
+		}
+		if self.matchKeyword("efault") {
+			return true, self.yield(TkDefault, 7)
+		}
+		break
+
+	case 'e', 'E':
+		if self.matchKeyword("nd") {
+			return true, self.yield(TkEnd, 3)
+		}
+		if self.matchKeyword("lse") {
+			return true, self.yield(TkElse, 4)
 		}
 		break
 
@@ -479,6 +515,9 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 		}
 		if self.matchKeyword("rom") {
 			return true, self.yield(TkFrom, 4)
+		}
+		if self.matchKeyword("ormat") {
+			return true, self.yield(TkFormat, 6)
 		}
 		break
 
@@ -491,6 +530,15 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 	case 'h', 'H':
 		if self.matchKeyword("aving") {
 			return true, self.yield(TkHaving, 6)
+		}
+		break
+
+	case 'i', 'I':
+		if self.matchKeyword("n") {
+			return true, self.yield(TkIn, 2)
+		}
+		if self.matchKeyword("f") {
+			return true, self.yield(TkIf, 2)
 		}
 		break
 
@@ -507,6 +555,8 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 		if self.matchKeyword("il") {
 			return true, self.yield(TkNull, 3)
 		}
+
+		// always put at very last
 		if self.matchKeyword("ot") {
 			return true, self.yield(TkNot, 3)
 		}
@@ -516,8 +566,17 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 		if self.matchKeyword("r") {
 			return true, self.yield(TkOr, 2)
 		}
+		if self.matchKeyword("utput") {
+			return true, self.yield(TkOutput, 6)
+		}
 		if yes, l := self.matchKeyword2("rder", "by"); yes {
 			return true, self.yield(TkOrderBy, l)
+		}
+		break
+
+	case 'r', 'R':
+		if self.matchKeyword("ewrite") {
+			return true, self.yield(TkRewrite, 6)
 		}
 		break
 
@@ -530,6 +589,9 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 	case 't', 'T':
 		if self.matchKeyword("rue") {
 			return true, self.yield(TkTrue, 4)
+		}
+		if self.matchKeyword("hen") {
+			return true, self.yield(TkThen, 4)
 		}
 		break
 

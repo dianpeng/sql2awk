@@ -7,7 +7,7 @@
 
 @![sql]
 @@@@@@@@@@@@@@@@@@
-select default($10, 123)
+select defval($10, 123)
 from tab("/tmp/t1.txt")
 @==================
 

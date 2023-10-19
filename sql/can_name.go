@@ -22,7 +22,9 @@ type CanName struct {
 
 func (self *CanName) Set(tidx, cidx int) {
 	if self.IsSettled() {
-		panic("This CanName has been settled")
+		if self.TableIndex != tidx || self.ColumnIndex != cidx {
+			panic("This CanName has been settled, but with a different table column index")
+		}
 	}
 	self.TableIndex = tidx
 	self.ColumnIndex = cidx
@@ -31,7 +33,9 @@ func (self *CanName) Set(tidx, cidx int) {
 
 func (self *CanName) SetRef(ref Expr) {
 	if self.IsSettled() {
-		panic("This CanName has been settled")
+		if self.Reference != ref {
+			panic("This CanName has been settled, but with different reference")
+		}
 	}
 	self.Reference = ref
 
