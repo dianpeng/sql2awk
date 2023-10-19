@@ -7,16 +7,25 @@ import (
 	"strings"
 )
 
+const (
+	AwkGnuAwk = iota
+	AwkGoAwk
+	AwkAwk
+	AwkNAwk
+	AwkMAwk
+	AwkFrawk // rust performant implementation
+)
+
 type Config struct {
 	OutputSeparator string
-	UseGoAWK        bool // whether using GoAWK, which does not have asorti and global access
+	AwkType         int
 }
 
 func Generate(x *plan.Plan, config *Config) (string, error) {
 	g := &queryCodeGen{
 		OutputSeparator: config.OutputSeparator,
 		query:           x,
-		useGoAWK:        config.UseGoAWK,
+		awkType:         config.AwkType,
 	}
 	return g.Gen()
 }
@@ -29,7 +38,7 @@ type queryCodeGen struct {
 	query           *plan.Plan
 	g               awkGlobal
 	tsRef           []tableScanGenRef
-	useGoAWK        bool
+	awkType         int
 }
 
 type subGen interface {
@@ -291,8 +300,12 @@ func (self *queryCodeGen) Gen() (string, error) {
 	}
 
 	builtinMisc := ""
-	if self.useGoAWK {
+	switch self.awkType {
+	case AwkGoAwk:
 		builtinMisc = builtinGoAWK
+		break
+	default:
+		break
 	}
 
 	// finally our skeletong will be done here

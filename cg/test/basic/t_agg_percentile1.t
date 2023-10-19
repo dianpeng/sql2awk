@@ -6,7 +6,7 @@
 @================
 
 @![sql]
-@!goawk=disable
+@!awk=sys
 @@@@@@@@@@@@@@@@@@
 select percentile($1, 50)
 from tab("/tmp/t1.txt")

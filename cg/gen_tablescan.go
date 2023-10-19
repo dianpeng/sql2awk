@@ -19,6 +19,32 @@ type tableScanGen struct {
 
 const tableScanTemplate = `
   if (FILENAME == "{{.Filename}}") {
+    {{if ne .FS ""}}
+    # workaround the issue with FS setting dynamically with awk. Additionally
+    # workaround the split with regexp issue, notes the regexp is static
+    if (FNR <= 1) {
+      # always the first line have the issue, we will *NOT* use NF, but
+      # use manual split hera, notes the FS will be treated as static regexp
+      # whose type will not touch the split function implementation bug, which
+      # not always use regexp search :(
+      __workaround_sep_n = split($0, __workaround_sep, /{{.FS}}/);
+      NF = __workaround_sep_n;
+      for (__workaround_i = 1; __workaround_i <= NF; __workaround_i++) {
+        $__workaround_i = __workaround_sep[__workaround_i];
+      }
+    }
+    FS="{{.FS}}"
+    {{end}}
+    {{if gt .Start 0}}
+    if (FNR <= {{.Start}}) {
+      next;
+    }
+    {{end}}
+    {{if gt .End 0}}
+    if (FNR > {{.End}}) {
+      nextfile;
+    }
+    {{end}}
     {{if ne .Filter ""}}
     if (!({{.Filter}})) next;
     {{end}}
@@ -37,7 +63,6 @@ const tableScanTemplate = `
     }
     next;
   }
-
 `
 
 func newTemplate(
@@ -46,13 +71,17 @@ func newTemplate(
 	return template.New("[template]").Parse(xx)
 }
 
-func (self *tableScanGen) genOne(
+func (self *tableScanGen) genOneTab(
 	ts *plan.TableScan,
 ) string {
 	filter := ""
 	if ts.Filter != nil {
 		filter = self.cg.genExpr(ts.Filter)
 	}
+
+	fs := ts.Table.Params.AsStr(0, "")
+	start := ts.Table.Params.AsInt(1, -1)
+	end := ts.Table.Params.AsInt(2, -1)
 
 	t, err := newTemplate(
 		tableScanTemplate,
@@ -74,6 +103,9 @@ func (self *tableScanGen) genOne(
 		"MaxColumn":      ts.Table.MaxColumn,
 		"FullColumn":     ts.Table.FullColumn,
 		"Filter":         filter,
+		"FS":             fs,
+		"Start":          start,
+		"End":            end,
 		"VarTable":       x.Table,
 		"VarTableLength": x.Size,
 		"VarTableField":  x.Field,
@@ -88,7 +120,16 @@ func (self *tableScanGen) gen(
 ) string {
 	buf := &strings.Builder{}
 	for _, ts := range p.TableScan {
-		data := self.genOne(ts)
+		data := ""
+		switch ts.Table.Type {
+		case "tab", "Tab":
+			data = self.genOneTab(ts)
+			break
+
+		default:
+			panic("unknown table type")
+			break
+		}
 		buf.WriteString(data)
 	}
 	return buf.String()

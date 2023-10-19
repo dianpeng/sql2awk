@@ -191,62 +191,84 @@ func (self *Parser) parseSelect() (*Select, error) {
 		projection = n
 	}
 
-	// from
-	if self.L.Token != TkFrom {
-		return nil, self.err("expect *from* here to specify the table")
-	}
-	if n, err := self.parseFrom(); err != nil {
-		return nil, err
-	} else {
-		from = n
-	}
+LOOP:
+	for {
+		switch self.L.Token {
+		case TkFrom:
+			if from != nil {
+				return nil, self.err("from cluase has already been specified")
+			}
 
-	// where clause, optional
-	if self.L.Token == TkWhere {
-		if n, err := self.parseWhere(); err != nil {
-			return nil, err
-		} else {
-			where = n
+			if n, err := self.parseFrom(); err != nil {
+				return nil, err
+			} else {
+				from = n
+			}
+			break
+
+		case TkWhere:
+			if where != nil {
+				return nil, self.err("where clause has already been specified")
+			}
+			if n, err := self.parseWhere(); err != nil {
+				return nil, err
+			} else {
+				where = n
+			}
+			break
+
+		case TkGroupBy:
+			if groupBy != nil {
+				return nil, self.err("group by clause has already been specified")
+			}
+			if n, err := self.parseGroupBy(); err != nil {
+				return nil, err
+			} else {
+				groupBy = n
+			}
+			break
+
+		case TkHaving:
+			if having != nil {
+				return nil, self.err("having clause has already been specified")
+			}
+			if n, err := self.parseHaving(); err != nil {
+				return nil, err
+			} else {
+				having = n
+			}
+			break
+
+		case TkOrderBy:
+			if orderBy != nil {
+				return nil, self.err("order by clause has already been specified")
+			}
+			if n, err := self.parseOrderBy(); err != nil {
+				return nil, err
+			} else {
+				orderBy = n
+			}
+			break
+
+		case TkLimit:
+			if limit != nil {
+				return nil, self.err("limit caluse has already been specified")
+			}
+			if n, err := self.parseLimit(); err != nil {
+				return nil, err
+			} else {
+				limit = n
+			}
+			break
+		default:
+			break LOOP
 		}
 	}
-
-	// group by, optional
-	if self.L.Token == TkGroupBy {
-		if n, err := self.parseGroupBy(); err != nil {
-			return nil, err
-		} else {
-			groupBy = n
-		}
-	}
-
-	// having, optional
-	if self.L.Token == TkHaving {
-		if n, err := self.parseHaving(); err != nil {
-			return nil, err
-		} else {
-			having = n
-		}
-	}
-
-	// order by, optional
-	if self.L.Token == TkOrderBy {
-		if n, err := self.parseOrderBy(); err != nil {
-			return nil, err
-		} else {
-			orderBy = n
-		}
-	}
-
-	// limit, optional
-	if self.L.Token == TkLimit {
-		if n, err := self.parseLimit(); err != nil {
-			return nil, err
-		} else {
-			limit = n
-		}
-	}
-
 	end := self.posEnd()
+
+	if from == nil {
+		return nil, self.err("from clause is not specified")
+	}
 
 	return &Select{
 		CodeInfo: CodeInfo{
@@ -1074,6 +1096,84 @@ func (self *Parser) parseConstExpr() *Const {
 			Ty:       ConstReal,
 			Real:     v,
 			CodeInfo: self.currentCodeInfo(start),
+		}
+
+	// unary can also be treated as *constant expression*, but in our grammar
+	// it is indeed an unary expression, we need to resolve this here as well
+	case TkNot, TkAdd, TkSub:
+		uop := []int{self.L.Token}
+		self.L.Next()
+
+		// get all the unary operations, this is really constant folding ...
+	LOOP:
+		for {
+			switch self.L.Token {
+			case TkNot, TkSub:
+				uop = append(uop, self.L.Token)
+				self.L.Next()
+				break
+			case TkAdd:
+				self.L.Next()
+				break
+			default:
+				break LOOP
+			}
+		}
+
+		// try to parse the rest as constant expression
+		if cc := self.parseConstExpr(); cc == nil {
+			return nil
+		} else {
+			lUop := len(uop)
+			for i := lUop - 1; i >= 0; i-- {
+				op := uop[i]
+				switch op {
+				case TkNot:
+					switch cc.Ty {
+					case ConstNull:
+						cc.Bool = true
+						cc.Ty = ConstBool
+						break
+					case ConstBool:
+						cc.Bool = !cc.Bool
+						break
+					case ConstInt:
+						cc.Bool = (cc.Int != 0)
+						cc.Ty = ConstBool
+						break
+					case ConstReal:
+						cc.Bool = (cc.Real != 0.0)
+						cc.Ty = ConstReal
+						break
+					default:
+						cc.Bool = (len(cc.String) != 0)
+						cc.Ty = ConstStr
+						break
+					}
+					break
+				default:
+					switch cc.Ty {
+					case ConstBool:
+						if cc.Bool {
+							cc.Int = int64(-1)
+						} else {
+							cc.Int = int64(0)
+						}
+						cc.Ty = ConstInt
+						break
+					case ConstInt:
+						cc.Int = -cc.Int
+						break
+					case ConstReal:
+						cc.Real = -cc.Real
+						break
+					default:
+						return nil
+					}
+					break
+				}
+			}
+			return cc
 		}
 
 	default:

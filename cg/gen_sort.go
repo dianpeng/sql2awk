@@ -31,7 +31,7 @@ func (self *sortCodeGen) setWriter(w *awkWriter) {
 
 func (self *sortCodeGen) genNext() error {
 	if sort := self.cg.query.Sort; sort != nil {
-		if self.cg.useGoAWK {
+		if self.cg.awkType == AwkGoAwk {
 			return fmt.Errorf(
 				"GoAWK cannot correctly generate *sort* and does not have builtin " +
 					"function to sort, additionally, it also does not have correct " +
@@ -88,7 +88,7 @@ $[ga, sort_value][$[l, sort_value_key]] = %[rid_list];
 
 func (self *sortCodeGen) genFlush() error {
 	if sort := self.cg.query.Sort; sort != nil {
-		if self.cg.useGoAWK {
+		if self.cg.awkType == AwkGoAwk {
 			return fmt.Errorf(
 				"GoAWK cannot correctly generate *sort* and does not have builtin " +
 					"function to sort, additionally, it also does not have correct " +

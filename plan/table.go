@@ -15,11 +15,14 @@ func (self *Plan) genTableDescriptor(
 	if len(fromVar.Vars) == 0 || fromVar.Vars[0].Ty != sql.ConstStr {
 		return nil, self.err("scan-table", "table path must be specified")
 	}
+	if fromVar.Name != "tab" && fromVar.Name != "tabular" {
+		return nil, self.err("scan-table", "unknown table type")
+	}
 
 	out := &TableDescriptor{
 		Index:      idx,
 		Path:       fromVar.Vars[0].String,
-		Params:     fromVar.Vars[1:],
+		Params:     sql.ConstList(fromVar.Vars[1:]),
 		Type:       fromVar.Name,
 		Alias:      fromVar.Alias,
 		Options:    constListToOptions(fromVar.Vars[1:]),

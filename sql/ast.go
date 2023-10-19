@@ -183,6 +183,8 @@ type Const struct {
 	CodeInfo CodeInfo
 }
 
+type ConstList []*Const
+
 type Ref struct {
 	Id       string
 	CodeInfo CodeInfo
@@ -254,6 +256,50 @@ func (self *Binary) CInfo() CodeInfo { return self.CodeInfo }
 
 func (self *Ternary) Type() int       { return ExprTernary }
 func (self *Ternary) CInfo() CodeInfo { return self.CodeInfo }
+
+func (self *ConstList) AsInt(idx int, def int) int {
+	if idx >= len(*self) {
+		return def
+	}
+	c := (*self)[idx]
+	if c.Ty != ConstInt {
+		return def
+	}
+	return int(c.Int)
+}
+
+func (self *ConstList) AsStr(idx int, def string) string {
+	if idx >= len(*self) {
+		return def
+	}
+	c := (*self)[idx]
+	if c.Ty != ConstStr {
+		return def
+	}
+	return c.String
+}
+
+func (self *ConstList) AsBool(idx int, def bool) bool {
+	if idx >= len(*self) {
+		return def
+	}
+	c := (*self)[idx]
+	if c.Ty != ConstBool {
+		return def
+	}
+	return c.Bool
+}
+
+func (self *ConstList) AsReal(idx int, def float64) float64 {
+	if idx >= len(*self) {
+		return def
+	}
+	c := (*self)[idx]
+	if c.Ty != ConstReal {
+		return def
+	}
+	return c.Real
+}
 
 /* ----------------------------------------------------------------------------
  * Visitor

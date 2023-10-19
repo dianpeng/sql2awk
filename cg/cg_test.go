@@ -41,7 +41,7 @@ type cookbook struct {
 	input    []string
 	code     string
 	result   string
-	useGoAwk bool
+	awkType  int
 }
 
 type section struct {
@@ -355,9 +355,10 @@ func (self *cookbook) genAwk() error {
 	if err != nil {
 		return fmt.Errorf("[plan]: %s", err)
 	}
-	self.useGoAwk = true
-	if yy.attrAt("goawk") == "disable" {
-		self.useGoAwk = false
+
+	self.awkType = AwkGnuAwk // system wise awk mostly
+	if yy.attrAt("awk") == "goawk" {
+		self.awkType = AwkGoAwk
 	}
 	p, err := plan.PlanCode(c)
 	if err != nil {
@@ -366,7 +367,7 @@ func (self *cookbook) genAwk() error {
 
 	code, err := Generate(p, &Config{
 		OutputSeparator: " ",
-		UseGoAWK:        self.useGoAwk,
+		AwkType:         self.awkType,
 	})
 	if err != nil {
 		return fmt.Errorf("[plan]: %s", err)
@@ -448,19 +449,22 @@ func (self *cookbook) shouldRunAwk() bool {
 }
 
 func (self *cookbook) runAwk() error {
-
 	if self.shouldRunAwk() {
-		if self.useGoAwk {
+		switch self.awkType {
+		case AwkGoAwk:
 			if err := self.runGoAwk(); err != nil {
 				return err
 			}
-		} else {
+			break
+		case AwkGnuAwk:
 			if err := self.runSysAwk(); err != nil {
 				return err
 			}
+			break
+		default:
+			return fmt.Errorf("unknown awk type")
 		}
 	}
-
 	return nil
 }
 

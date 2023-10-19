@@ -6,7 +6,7 @@
 @================
 
 @![sql]
-@!goawk=disable
+@!awk=sys
 @@@@@@@@@@@@@@@@@@
 select histogram($1, 0, 200, 10)
 from tab("/tmp/t1.txt")

@@ -12,7 +12,7 @@
 @================
 
 @![sql]
-@!goawk=disable
+@!awk=sys
 @@@@@@@@@@@@@@@@@@
 select *
 from tab("/tmp/t1.txt")
