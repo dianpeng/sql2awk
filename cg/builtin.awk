@@ -64,12 +64,12 @@ function agg_histogram(input, input_start, input_size, minval, maxval, numbin,
 }
 
 function array_join(array, start, end, sep,    result, i) {
-	if (sep == "")
-		sep = ";"
-	result = array[start]
-	for (i = start + 1; i <= end; i++)
-		result = result sep array[i]
-	return result
+  if (sep == "")
+    sep = ";"
+  result = array[start]
+  for (i = start + 1; i <= end; i++)
+    result = result sep array[i]
+  return result
 }
 
 # type conversion and type assertion

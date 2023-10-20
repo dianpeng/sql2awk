@@ -49,6 +49,7 @@ const (
 	TkColon
 	TkDColon
 	TkQuestion
+	TkAssign
 
 	TkLSqr
 	TkRSqr
@@ -752,7 +753,7 @@ func (self *Lexer) next() int {
 			if self.nextRune2() == '=' {
 				return self.yield(TkEq, 2)
 			} else {
-				return self.err("are you missing '=' for equal operator?")
+				return self.yield(TkAssign, 1)
 			}
 
 		case '>':

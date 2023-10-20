@@ -139,6 +139,7 @@ func (self *Plan) planOutput(s *sql.Select) {
 		case sql.SelectVarCol:
 			col := x.(*sql.Col)
 			self.Output.VarList = append(self.Output.VarList, col.Value)
+			self.Output.VarAlias = append(self.Output.VarAlias, col.Alias())
 			break
 
 		case sql.SelectVarStar:
@@ -196,5 +197,8 @@ func (self *Plan) plan(s *sql.Select) error {
 	self.planHaving(s)
 	self.planSort(s)
 	self.planOutput(s)
+	if err := self.planFormat(s); err != nil {
+		return err
+	}
 	return nil
 }

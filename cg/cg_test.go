@@ -495,8 +495,13 @@ func (self *cookbook) toOrderList(
 		if len(l) == 0 {
 			continue
 		}
-		list := strings.Split(l, " ")
-		out = append(out, list)
+		ll := []string{}
+		for _, xx := range strings.Split(l, " ") {
+			if v := strings.TrimSpace(xx); len(v) != 0 {
+				ll = append(ll, v)
+			}
+		}
+		out = append(out, ll)
 	}
 	return out
 }

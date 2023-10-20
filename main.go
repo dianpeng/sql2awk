@@ -1,12 +1,19 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"github.com/dianpeng/sql2awk/cg"
 	"github.com/dianpeng/sql2awk/plan"
 	"github.com/dianpeng/sql2awk/sql"
 	"io"
 	"os"
+)
+
+var fOutput = flag.String(
+	"output",
+	"",
+	"specify path to save output file, default write to STDOUT",
 )
 
 func oops(stage string, err error) {
@@ -23,7 +30,9 @@ func readStdin() string {
 }
 
 func main() {
+	flag.Parse()
 	s := readStdin()
+
 	parser := sql.NewParser(s)
 	code, err := parser.Parse()
 	if err != nil {
@@ -45,6 +54,16 @@ func main() {
 		oops("code-gen", err)
 	}
 
-	fmt.Printf("%s\n", awkCode)
+	if *fOutput == "" {
+		fmt.Printf("%s\n", awkCode)
+	} else {
+		if err := os.WriteFile(
+			*fOutput,
+			[]byte(awkCode),
+			0644,
+		); err != nil {
+			oops("save", err)
+		}
+	}
 	os.Exit(0)
 }

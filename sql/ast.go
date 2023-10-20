@@ -7,11 +7,11 @@ import (
 )
 
 const (
-	ConstBool = iota
+	ConstNull = iota
+	ConstBool
 	ConstStr
 	ConstInt
 	ConstReal
-	ConstNull
 )
 
 const (
@@ -153,10 +153,29 @@ type Limit struct {
 	Limit    int64
 }
 
+// Extension to original SQL, allow user to dump the table in a better way
+// For format, we allow known value's toggles to be set
+
+type FormatColumn struct {
+	Index int
+	Value *Const
+}
+
+type Format struct {
+	Title   *Const // title of the table
+	Border  *Const // border of thet able
+	Base    *Const // base policy of the format
+	Number  *Const
+	String  *Const
+	Rest    *Const
+	Padding *Const         // padding size
+	Column  []FormatColumn // column customization
+}
+
 type Select struct {
 	CodeInfo CodeInfo
+	Distinct bool // whether a distinct selection, ie dedup
 
-	Distinct   bool        // whether a distinct selection, ie dedup
 	Projection *Projection // projection
 	From       *From       // from clause
 	Where      *Where      // where clause
@@ -164,6 +183,7 @@ type Select struct {
 	Having     *Having     // having
 	OrderBy    *OrderBy    // order by
 	Limit      *Limit      // limit clause
+	Format     *Format     // format of the select, when dumpped
 }
 
 type Code struct {

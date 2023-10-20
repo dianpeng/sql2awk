@@ -21,6 +21,8 @@ type Config struct {
 	AwkType         int
 }
 
+const outputAlign = 16
+
 func Generate(x *plan.Plan, config *Config) (string, error) {
 	g := &queryCodeGen{
 		OutputSeparator: config.OutputSeparator,
@@ -46,6 +48,18 @@ type subGen interface {
 	genFlush() error
 	genDone() error
 	setWriter(*awkWriter)
+}
+
+func (self *queryCodeGen) formatSep() string {
+	return self.query.Format.GetBorderString()
+}
+
+func (self *queryCodeGen) formatPaddingSize() int {
+	return self.query.Format.Padding.IntOption
+}
+
+func (self *queryCodeGen) outputSize() int {
+	return len(self.query.Output.VarList)
 }
 
 func (self *queryCodeGen) tsSize() int {
@@ -132,9 +146,10 @@ func (self *queryCodeGen) genJoin() string {
 func (self *queryCodeGen) genNext(
 	gen subGen,
 	name string,
+	n int,
 ) (string, error) {
 	writer, g := newAwkWriter(
-		self.tsSize(),
+		n,
 		name,
 	)
 	self.g.addG(g)
@@ -148,9 +163,10 @@ func (self *queryCodeGen) genNext(
 func (self *queryCodeGen) genFlush(
 	gen subGen,
 	name string,
+	n int,
 ) (string, error) {
 	writer, g := newAwkWriter(
-		0,
+		n,
 		name,
 	)
 	self.g.addG(g)
@@ -164,9 +180,10 @@ func (self *queryCodeGen) genFlush(
 func (self *queryCodeGen) genDone(
 	gen subGen,
 	name string,
+	n int,
 ) (string, error) {
 	writer, g := newAwkWriter(
-		0,
+		n,
 		name,
 	)
 	self.g.addG(g)
@@ -185,6 +202,7 @@ func (self *queryCodeGen) genSubGen(
 	if data, err := self.genNext(
 		gen,
 		fmt.Sprintf("%s_next", stage),
+		self.tsSize(),
 	); err != nil {
 		return "", err
 	} else {
@@ -194,6 +212,7 @@ func (self *queryCodeGen) genSubGen(
 	if data, err := self.genFlush(
 		gen,
 		fmt.Sprintf("%s_flush", stage),
+		0,
 	); err != nil {
 		return "", err
 	} else {
@@ -203,6 +222,48 @@ func (self *queryCodeGen) genSubGen(
 	if data, err := self.genDone(
 		gen,
 		fmt.Sprintf("%s_done", stage),
+		0,
+	); err != nil {
+		return "", err
+	} else {
+		buf.WriteString(data)
+	}
+
+	return buf.String(), nil
+}
+
+func (self *queryCodeGen) genSubGenN(
+	gen subGen,
+	stage string,
+	n1 int,
+	n2 int,
+	n3 int,
+) (string, error) {
+	buf := strings.Builder{}
+	if data, err := self.genNext(
+		gen,
+		fmt.Sprintf("%s_next", stage),
+		n1,
+	); err != nil {
+		return "", err
+	} else {
+		buf.WriteString(data)
+	}
+
+	if data, err := self.genFlush(
+		gen,
+		fmt.Sprintf("%s_flush", stage),
+		n2,
+	); err != nil {
+		return "", err
+	} else {
+		buf.WriteString(data)
+	}
+
+	if data, err := self.genDone(
+		gen,
+		fmt.Sprintf("%s_done", stage),
+		n3,
 	); err != nil {
 		return "", err
 	} else {
@@ -246,6 +307,13 @@ func (self *queryCodeGen) genOutput() (string, error) {
 	return self.genSubGen(gen, "output")
 }
 
+func (self *queryCodeGen) genFormat() (string, error) {
+	gen := &formatCodeGen{
+		cg: self,
+	}
+	return self.genSubGenN(gen, "format", len(self.query.Output.VarList), 0, 0)
+}
+
 func (self *queryCodeGen) genBegin() string {
 	buf := &strings.Builder{}
 	for _, g := range self.g.globalList() {
@@ -257,6 +325,42 @@ func (self *queryCodeGen) genBegin() string {
 	return buf.String()
 }
 
+func (self *queryCodeGen) genFormatBuiltin() string {
+	buf := &strings.Builder{}
+
+	{
+		c, f := generateFormatFallbackFormat(self)
+		self.g.addG(f)
+		buf.WriteString(c)
+	}
+
+	{
+		c, f := generateFormatWildcardFallbackPrint(self)
+		self.g.addG(f)
+		buf.WriteString(c)
+	}
+
+	{
+		c, f := generateFormatWildcardPrintColumn(self)
+		self.g.addG(f)
+		buf.WriteString(c)
+	}
+
+	{
+		c, f := generateFormatPrologue(self)
+		self.g.addG(f)
+		buf.WriteString(c)
+	}
+
+	{
+		c, f := generateFormatEpilogue(self)
+		self.g.addG(f)
+		buf.WriteString(c)
+	}
+
+	return buf.String()
+}
+
 func (self *queryCodeGen) Gen() (string, error) {
 	tableScan := ""
 	join := ""
@@ -265,6 +369,7 @@ func (self *queryCodeGen) Gen() (string, error) {
 	having := ""
 	sort := ""
 	output := ""
+	format := ""
 
 	tableScan = self.genTableScan()
 	join = self.genJoin()
@@ -299,6 +404,13 @@ func (self *queryCodeGen) Gen() (string, error) {
 		output = x
 	}
 
+	if x, err := self.genFormat(); err != nil {
+		return "", err
+	} else {
+		format = x
+	}
+	formatBuiltin := self.genFormatBuiltin()
+
 	builtinMisc := ""
 	switch self.awkType {
 	case AwkGoAwk:
@@ -326,7 +438,9 @@ BEGIN {
 }
 
 END {
+  format_prologue();
   join();
+  format_epilogue();
 }
 
 # -----------------------------------------------------------------
@@ -360,12 +474,18 @@ END {
 %s
 
 # -----------------------------------------------------------------
+# format
+# -----------------------------------------------------------------
+%s
+%s
+
+# -----------------------------------------------------------------
 # builtins
 # -----------------------------------------------------------------
 %s
 %s
 `,
-		self.genBegin(),
+		self.genBegin(), // always *LAST*, need to collect globals
 		tableScan,
 		join,
 		groupBy,
@@ -373,6 +493,8 @@ END {
 		having,
 		sort,
 		output,
+		format,
+		formatBuiltin,
 		builtinAWK,
 		builtinMisc,
 	), nil

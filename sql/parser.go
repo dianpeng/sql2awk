@@ -174,6 +174,7 @@ func (self *Parser) parseSelect() (*Select, error) {
 	var having *Having
 	var orderBy *OrderBy
 	var limit *Limit
+	var format *Format
 
 	distinct := false
 
@@ -260,6 +261,16 @@ LOOP:
 				limit = n
 			}
 			break
+		case TkFormat:
+			if format != nil {
+				return nil, self.err("format clause has already been specified")
+			}
+			if n, err := self.parseFormat(); err != nil {
+				return nil, err
+			} else {
+				format = n
+			}
+			break
 		default:
 			break LOOP
 		}
@@ -284,7 +295,105 @@ LOOP:
 		Having:     having,
 		OrderBy:    orderBy,
 		Limit:      limit,
+		Format:     format,
 	}, nil
+}
+
+func (self *Parser) parseFormat() (*Format, error) {
+	self.L.Next()
+	format := &Format{}
+
+	for {
+		key := ""
+		idx := -1 // column index, only used when key is "column"
+
+		var val *Const
+
+		if self.L.Token != TkId {
+			return nil, self.err("expect a *identifier* to be format option")
+		}
+		key = self.L.Lexeme.Text
+		self.L.Next()
+
+		switch key {
+		case "title", "border", "base", "number", "string", "rest", "padding":
+			break
+		case "column":
+			if self.L.Token != TkLPar {
+				return nil, self.err(
+					"expect a '(index)' after column format option",
+				)
+			} else {
+				self.L.Next()
+			}
+			if self.L.Token != TkInt {
+				return nil, self.err(
+					"expect a positive integer to specify column index",
+				)
+			} else {
+				idx = int(self.L.Lexeme.Int)
+			}
+			if self.L.Next() != TkRPar {
+				return nil, self.err(
+					"expect a ')' to close index expression for column format option",
+				)
+			}
+			self.L.Next()
+			break
+		default:
+			return nil, self.err(
+				"unknown format option",
+			)
+		}
+
+		if self.L.Token != TkAssign {
+			return nil, self.err("expect a '=' to assign a value to format option")
+		}
+		self.L.Next()
+		if c := self.parseConstExpr(); c == nil {
+			return nil, self.err("expect a const/literal expression to be format option value")
+		} else {
+			val = c
+		}
+
+		switch key {
+		case "title":
+			format.Title = val
+			break
+		case "border":
+			format.Border = val
+			break
+		case "padding":
+			format.Padding = val
+			break
+		case "base":
+			format.Base = val
+			break
+		case "number":
+			format.Number = val
+			break
+		case "string":
+			format.String = val
+			break
+		case "rest":
+			format.Rest = val
+			break
+		default:
+			format.Column = append(format.Column, FormatColumn{
+				Index: idx,
+				Value: val,
+			})
+			break
+		}
+
+		if self.L.Token != TkComma {
+			break
+		} else {
+			self.L.Next()
+		}
+	}
+
+	return format, nil
 }
 
 func (self *Parser) parseProjectionVar(idx int) (SelectVar, error) {

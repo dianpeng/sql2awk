@@ -293,6 +293,22 @@ func (self *awkWriter) ridCommaList(sz int) string {
 	return strings.Join(out, "\",\"")
 }
 
+func (self *awkWriter) ridParamList(sz int) string {
+	out := []string{}
+	for i := 0; i < sz; i++ {
+		out = append(out, fmt.Sprintf("%s", self.rid(i)))
+	}
+	return strings.Join(out, ", ")
+}
+
+func (self *awkWriter) ridParamStrList(sz int) string {
+	out := []string{}
+	for i := 0; i < sz; i++ {
+		out = append(out, fmt.Sprintf("%s\"\"", self.rid(i)))
+	}
+	return strings.Join(out, ", ")
+}
+
 // ----------------------------------------------------------------------------
 //
 // Substitution phase, ie the meta instruction inside of the template should

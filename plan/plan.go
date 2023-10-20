@@ -182,10 +182,55 @@ type Sort struct {
 // selected vars
 type Output struct {
 	VarList  []sql.Expr
-	VarSize  int   // size of variable that will be output, considering wildcard
-	Wildcard bool  // whether select * shows up
-	Limit    int64 // maximum allowed entries output
-	Distinct bool  // whether perform distinct operation for the output
+	VarAlias []string // alias of projection, empty means no alias
+	VarSize  int      // size of variable that will be output, considering wildcard
+	Wildcard bool     // whether select * shows up
+	Limit    int64    // maximum allowed entries output
+	Distinct bool     // whether perform distinct operation for the output
+}
+
+// ----------------------------------------------------------------------------
+// Format phase, allowing better visualization of the dumpped data in terminal
+// The format algorithm is basically layout as following. It is a structurized
+// system with 3 layers, based on the customization priority, descendingly,
+// ----------------------------------------------------------------------------
+// 1) column[index], if applicable takes highest priority
+// 2) type, if applicable kicks in
+// 3) base, 1 and 2 option missed, then the base format kicks in
+// ----------------------------------------------------------------------------
+
+const (
+	ColorBlack = iota
+	ColorRed
+	ColorGreen
+	ColorYellow
+	ColorBlue
+	ColorMagenta
+	ColorCyan
+	ColorWhite
+	ColorNone
+)
+
+type FormatInstruction struct {
+	Ignore      bool    // whether this field is entirely ignored
+	Bold        bool    // whether this field will be showed in bold font
+	Italic      bool    // whether this field will be showed in italic font
+	Underline   bool    // whether this field will be showed with underline
+	Color       int     // color code of the field
+	Index       int     // index, used only by column formatting
+	StrOption   string  // string option, general option
+	IntOption   int     // int value, option
+	FloatOption float64 // float64 value, option
+}
+
+type Format struct {
+	Title   *FormatInstruction
+	Border  *FormatInstruction
+	Number  *FormatInstruction
+	String  *FormatInstruction
+	Rest    *FormatInstruction
+	Padding *FormatInstruction
+	Column  []*FormatInstruction
 }
 
 func (self *Output) HasLimit() bool { return self.Limit < math.MaxInt64 }
@@ -204,8 +249,9 @@ type Plan struct {
 	GroupBy   *GroupBy     // group by
 	Agg       *Agg         // aggregation phase
 	Having    *Having      // having phase
-	Output    *Output      // output phase, must exist
 	Sort      *Sort        // delegate to other one to do the job
+	Output    *Output      // output phase, must exist
+	Format    *Format      // format of the plan, always valid
 
 	// --------------------------------------------------------------------------
 	// private data

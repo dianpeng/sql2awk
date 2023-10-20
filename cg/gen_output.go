@@ -3,7 +3,7 @@ package cg
 import (
 	"fmt"
 	"github.com/dianpeng/sql2awk/plan"
-	"strings"
+	_ "strings"
 )
 
 func generateOutputPrologue(
@@ -80,22 +80,51 @@ type outputCodeGenWildcard struct {
 
 func (self *outputCodeGenWildcard) genVarOutput(plan *plan.Output) error {
 	p := self.cg.query
+	f := self.cg.query.Format
 
-	for _, ts := range p.TableScan {
-		self.writer.Chunk(
-			`
-for ($[l, i] = 1; $[l, i] <= %[table_size]; $[l, i]++) {
-  printf "%s%[sep]",%[table][%[rid], $[l, i]]
-}
-`,
-			awkWriterCtx{
-				"table":      self.cg.varTable(ts.Table.Index),
-				"table_size": self.cg.varTableField(ts.Table.Index),
-				"rid":        self.cg.varRID(ts.Table.Index),
-				"sep":        self.cg.OutputSeparator,
-			},
-		)
+	if f.IsColumnFormatDefault() {
+		// fastpath, do not need to implement dynamic formatting of wildcard
+		for _, ts := range p.TableScan {
+			self.writer.Chunk(
+				`
+  for ($[l, i] = 1; $[l, i] <= %[table_size]; $[l, i]++) {
+    printf("%[sep]%-%[padding]s",%[table][%[rid], $[l, i]]);
+  }
+  `,
+				awkWriterCtx{
+					"padding":    self.cg.formatPaddingSize(),
+					"table":      self.cg.varTable(ts.Table.Index),
+					"table_size": self.cg.varTableField(ts.Table.Index),
+					"rid":        self.cg.varRID(ts.Table.Index),
+					"sep":        self.cg.formatSep(),
+				},
+			)
+		}
+	} else {
+		for _, ts := range p.TableScan {
+			self.writer.Chunk(
+				`
+  for ($[l, i] = 1; $[l, i] <= %[table_size]; $[l, i]++) {
+    format_wildcard_print_column($[l, i]-1, %[table][%[rid], $[l, i]]);
+  }
+  `,
+				awkWriterCtx{
+					"table":      self.cg.varTable(ts.Table.Index),
+					"table_size": self.cg.varTableField(ts.Table.Index),
+					"rid":        self.cg.varRID(ts.Table.Index),
+				},
+			)
+		}
 	}
+
+	self.writer.Line(
+		`printf("%[sep]\n");`,
+		awkWriterCtx{
+			"sep": self.cg.formatSep(),
+		},
+	)
+
+	self.writer.Line("printf(\"\\n\")", nil)
 	return nil
 }
 
@@ -105,7 +134,6 @@ func (self *outputCodeGenWildcard) genOutput(output *plan.Output) error {
 	if err := self.genVarOutput(output); err != nil {
 		return err
 	}
-	self.writer.Line("print \"\"", nil)
 	return nil
 }
 
@@ -131,7 +159,6 @@ for ($[l, i] = 1; $[l, i] <= %[table_size]; $[l, i]++) {
 				"table":      self.cg.varTable(ts.Table.Index),
 				"table_size": self.cg.varTableField(ts.Table.Index),
 				"rid":        self.cg.varRID(ts.Table.Index),
-				"sep":        self.cg.OutputSeparator,
 			},
 		)
 	}
@@ -279,18 +306,10 @@ if ($[ga, distinct][$[l, distinct_key]] == "") {
 func (self *outputCodeGenNormal) genVarOutput(
 	output *plan.Output,
 ) error {
-	self.writer.oIndent()
-	self.writer.o("printf \"")
-	for _, _ = range output.VarList {
-		self.writer.o("%s")
-		self.writer.o(self.cg.OutputSeparator)
-	}
-	self.writer.o("\",")
-
-	x := self.outputLocalList(output)
-	self.writer.o(strings.Join(x, ","))
-	self.writer.o(";")
-	self.writer.oLB()
+	self.writer.Call(
+		"format_next",
+		self.outputLocalList(output),
+	)
 	return nil
 }
 
@@ -308,7 +327,7 @@ func (self *outputCodeGenNormal) genOutput(
 	if err := self.genVarOutput(output); err != nil {
 		return err
 	}
-	self.writer.Line("print \"\"", nil)
+	self.writer.Line("printf \"\\n\"", nil)
 	return nil
 }
 
