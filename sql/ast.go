@@ -73,6 +73,7 @@ type Col struct {
 	ColIndex int
 	As       string
 	Value    Expr
+	Rewrite  *Rewrite
 }
 
 type Star struct {
@@ -119,9 +120,28 @@ type ColName struct {
 
 // From is a format of *function call* here, but just allow constant arguments
 type FromVar struct {
-	Vars  []*Const
-	Name  string
-	Alias string // name of the table, ie aliased etc ...
+	Vars    []*Const
+	Rewrite *Rewrite
+	Name    string
+	Alias   string // name of the table, ie aliased etc ...
+}
+
+type RewriteSet struct {
+	Column string
+	Value  Expr
+}
+
+type RewriteClause struct {
+	CodeInfo CodeInfo
+	When     Expr          // Condition of rewrite operation
+	Set      []*RewriteSet // list of set
+}
+
+func (self *RewriteClause) Ignore() bool { return len(self.Set) == 0 }
+
+type Rewrite struct {
+	CodeInfo CodeInfo
+	List     []*RewriteClause
 }
 
 type From struct {

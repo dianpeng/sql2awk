@@ -51,6 +51,22 @@ const (
 
 type Options []interface{}
 
+// comming from Rewrite syntax. Used to represent manipulation of scanning of
+// table.
+type TableRewriteSet struct {
+	Column int
+	Value  sql.Expr
+}
+
+type TableRewriteStmt struct {
+	Cond sql.Expr           // condition of expression
+	Set  []*TableRewriteSet // set, len(Set) == 0 means ignore the current one
+}
+
+type TableRewrite struct {
+	Stmt []*TableRewriteStmt
+}
+
 type TableDescriptor struct {
 	Index      int
 	Path       string
@@ -62,6 +78,7 @@ type TableDescriptor struct {
 	MaxColumn  int          // maximum column index know to us, at least one column
 	Column     map[int]bool // list of column fields will be access
 	FullColumn bool         // whehter require a full column dump here
+	Rewrite    *TableRewrite
 }
 
 type TableScan struct {

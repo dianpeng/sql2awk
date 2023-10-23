@@ -18,6 +18,10 @@ func (self *Plan) genTableDescriptor(
 	if fromVar.Name != "tab" && fromVar.Name != "tabular" {
 		return nil, self.err("scan-table", "unknown table type")
 	}
+	rewrite, err := self.rewrite(fromVar.Rewrite)
+	if err != nil {
+		return nil, err
+	}
 
 	out := &TableDescriptor{
 		Index:      idx,
@@ -30,6 +34,7 @@ func (self *Plan) genTableDescriptor(
 		MaxColumn:  -1,
 		Column:     make(map[int]bool),
 		FullColumn: false,
+		Rewrite:    rewrite,
 	}
 
 	return out, nil
@@ -54,6 +59,47 @@ func (self *Plan) indexTableDescriptor(
 	} else {
 		return self.tableList[idx]
 	}
+}
+
+// Rewrite phase translation, kind of simple and intutitive
+func (self *Plan) rewrite(r *sql.Rewrite) (*TableRewrite, error) {
+	if r == nil {
+		return nil, nil
+	}
+	out := &TableRewrite{}
+	for _, rr := range r.List {
+		if rc, err := self.rewriteOneClause(rr); err != nil {
+			return nil, err
+		} else {
+			out.Stmt = append(out.Stmt, rc)
+		}
+	}
+	return out, nil
+}
+
+func (self *Plan) rewriteOneClause(rr *sql.RewriteClause) (*TableRewriteStmt, error) {
+	out := &TableRewriteStmt{
+		Cond: rr.When,
+	}
+	for _, rr := range rr.Set {
+		if set, err := self.rewriteSet(rr); err != nil {
+			return nil, err
+		} else {
+			out.Set = append(out.Set, set)
+		}
+	}
+	return out, nil
+}
+
+func (self *Plan) rewriteSet(rr *sql.RewriteSet) (*TableRewriteSet, error) {
+	idx := self.codx(rr.Column)
+	if idx < 0 {
+		return nil, self.err("tablescan", "rewrite case's column index is invalid")
+	}
+	return &TableRewriteSet{
+		Column: idx,
+		Value:  rr.Value,
+	}, nil
 }
 
 func (self *Plan) scanTable(s *sql.Select) error {

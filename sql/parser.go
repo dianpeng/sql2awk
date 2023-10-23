@@ -524,6 +524,14 @@ func (self *Parser) parseFromVar() (*FromVar, error) {
 		self.L.Next()
 	}
 
+	if self.L.Token == TkRewrite {
+		if n, err := self.parseRewrite(); err != nil {
+			return nil, err
+		} else {
+			fromVar.Rewrite = n
+		}
+	}
+
 	return fromVar, nil
 }
 
@@ -548,6 +556,86 @@ func (self *Parser) parseFrom() (*From, error) {
 
 	from.CodeInfo = self.currentCodeInfo(start)
 	return from, nil
+}
+
+func (self *Parser) parseRewrite() (*Rewrite, error) {
+	start := self.posStart()
+	self.L.Next()
+	out := &Rewrite{}
+
+	// when list
+	for self.L.Token != TkEnd {
+		if self.L.Token != TkWhen {
+			return nil, self.err("expect a *when* for rewrite list")
+		}
+		self.L.Next()
+
+		clause := &RewriteClause{}
+		clauseStart := self.posStart()
+
+		if expr, err := self.parseExpr(); err != nil {
+			return nil, err
+		} else {
+			clause.When = expr
+		}
+
+		if self.L.Token != TkThen {
+			return nil, self.err("expect a *then* for yielding the rewritted expression")
+		}
+		self.L.Next()
+
+		switch self.L.Token {
+		case TkNext:
+			self.L.Next()
+			break
+		case TkSet:
+			// set key word
+			self.L.Next()
+
+			// column expression, or ID's here
+			for {
+				set := &RewriteSet{}
+
+				if self.L.Token != TkId {
+					return nil, self.err("expect a column index, example as $1,$2,...")
+				}
+				set.Column = self.L.Lexeme.Text
+
+				if self.L.Next() != TkAssign {
+					return nil, self.err("expect = here to indicate rewrite expression")
+				}
+				self.L.Next()
+				if expr, err := self.parseExpr(); err != nil {
+					return nil, err
+				} else {
+					set.Value = expr
+				}
+
+				// allow multiple set with dangling comma, ie user can write as
+				// then set $1=1, $2=2, $3=3 ...
+				if self.L.Token == TkComma {
+					self.L.Next()
+				} else {
+					break
+				}
+				clause.Set = append(clause.Set, set)
+			}
+			break
+		default:
+			return nil, self.err("expect a set/next after then")
+		}
+
+		if self.L.Token == TkSemicolon {
+			self.L.Next()
+		}
+
+		clause.CodeInfo = self.currentCodeInfo(clauseStart)
+		out.List = append(out.List, clause)
+	}
+
+	self.L.Next()
+	out.CodeInfo = self.currentCodeInfo(start)
+	return out, nil
 }
 
 func (self *Parser) parseWhere() (*Where, error) {

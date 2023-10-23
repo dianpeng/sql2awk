@@ -90,8 +90,11 @@ func newAwkWriter(
 
 func (self *awkWriter) Flush() string {
 	out := strings.Builder{}
-
 	body := self.buf.String() // body
+	if self.funcName == "" {
+		return body // if we do not have function name, just return the body
+	}
+
 	paramList := []string{}
 	localList := []string{}
 
@@ -748,6 +751,19 @@ func (self *awkWriter) For(
 }
 
 func (self *awkWriter) ForEnd() {
+	self.indent--
+	self.Line("}", nil)
+}
+
+func (self *awkWriter) If(
+	cond string,
+	ctx awkWriterCtx,
+) {
+	self.Line(fmt.Sprintf("if (%s) {", cond), ctx)
+	self.indent++
+}
+
+func (self *awkWriter) IfEnd() {
 	self.indent--
 	self.Line("}", nil)
 }

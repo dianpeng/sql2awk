@@ -120,14 +120,21 @@ func (self *queryCodeGen) genExpr(
 	return gen.o.String()
 }
 
-func (self *queryCodeGen) genTableScan() string {
-	buf := strings.Builder{}
+func (self *queryCodeGen) genTableScan() (string, error) {
+	writer, g := newAwkWriter(
+		0,
+		"",
+	)
+	self.g.addG(g)
 	gen := &tableScanGen{
-		cg: self,
+		cg:     self,
+		writer: writer,
 	}
-	buf.WriteString(gen.gen(self.query))
+	if err := gen.gen(self.query); err != nil {
+		return "", err
+	}
 	self.tsRef = gen.Ref
-	return buf.String()
+	return writer.Flush(), nil
 }
 
 func (self *queryCodeGen) genJoin() string {
@@ -383,7 +390,12 @@ func (self *queryCodeGen) Gen() (string, error) {
 	output := ""
 	format := ""
 
-	tableScan = self.genTableScan()
+	if ts, err := self.genTableScan(); err != nil {
+		return "", err
+	} else {
+		tableScan = ts
+	}
+
 	join = self.genJoin()
 
 	if x, err := self.genGroupBy(); err != nil {

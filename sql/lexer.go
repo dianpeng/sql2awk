@@ -42,6 +42,11 @@ const (
 	TkFormat
 	TkRewrite
 	TkOutput
+	TkSet
+	TkWith
+	TkWhen
+	TkYield
+	TkNext
 
 	// Punctuation
 	TkComma
@@ -556,6 +561,9 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 		if self.matchKeyword("il") {
 			return true, self.yield(TkNull, 3)
 		}
+		if self.matchKeyword("ext") {
+			return true, self.yield(TkNext, 4)
+		}
 
 		// always put at very last
 		if self.matchKeyword("ot") {
@@ -585,6 +593,9 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 		if self.matchKeyword("elect") {
 			return true, self.yield(TkSelect, 6)
 		}
+		if self.matchKeyword("et") {
+			return true, self.yield(TkSet, 3)
+		}
 		break
 
 	case 't', 'T':
@@ -599,6 +610,18 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 	case 'w', 'W':
 		if self.matchKeyword("here") {
 			return true, self.yield(TkWhere, 5)
+		}
+		if self.matchKeyword("ith") {
+			return true, self.yield(TkWith, 4)
+		}
+		if self.matchKeyword("hen") {
+			return true, self.yield(TkWhen, 4)
+		}
+		break
+
+	case 'y', 'Y':
+		if self.matchKeyword("ield") {
+			return true, self.yield(TkYield, 5)
 		}
 		break
 
