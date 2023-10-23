@@ -585,7 +585,7 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 
 	case 'r', 'R':
 		if self.matchKeyword("ewrite") {
-			return true, self.yield(TkRewrite, 6)
+			return true, self.yield(TkRewrite, 7)
 		}
 		break
 

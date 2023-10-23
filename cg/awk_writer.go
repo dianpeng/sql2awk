@@ -481,7 +481,7 @@ func (self *awkWriter) processVarCmd(
 		return self.globalVarName(cmd.arg[0], -1), nil
 	case "ga", "globalarray":
 		if len(cmd.arg) != 1 {
-			return "", fmt.Errorf("global variable name has too many components")
+			return "", fmt.Errorf("global array variable name has too many components")
 		}
 		self.DefineGlobalArray(cmd.arg[0])
 		return self.globalVarName(cmd.arg[0], -1), nil
@@ -494,7 +494,7 @@ func (self *awkWriter) processVarCmd(
 			self.DefineLocalN(cmd.arg[0], x)
 			return self.localVarName(cmd.arg[0], x), nil
 		} else {
-			return "", fmt.Errorf("global variable name has too many components")
+			return "", fmt.Errorf("local variable name has too many components")
 		}
 	default:
 		return "", fmt.Errorf("unknown variable type in $ expression")

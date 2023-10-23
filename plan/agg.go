@@ -123,6 +123,24 @@ func (self *Plan) isAggFunc(
 		)
 	}
 
+	// check wildcard parameters
+	if first := p.Suffix[0].Call.Parameters[0]; first.Type() == sql.ExprRef && first.(*sql.Ref).Id == "*" {
+
+		ref := first.(*sql.Ref)
+		if len(p.Suffix[0].Call.Parameters) > 1 {
+			return -1, nil, nil, self.err("agg", "invalid wildcard/* parameter arity")
+		}
+		if ty != AggCount {
+			return -1, nil, nil, self.err("agg", "only COUNT can use * as parameter")
+		} else {
+			p.Suffix[0].Call.Parameters[0] = &sql.Const{
+				Ty:       sql.ConstInt,
+				Int:      int64(1),
+				CodeInfo: ref.CodeInfo,
+			}
+		}
+	}
+
 	return ty, p.Suffix[0], p.Suffix[0].Call.Parameters[0], nil
 }
 

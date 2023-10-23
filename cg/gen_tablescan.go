@@ -97,14 +97,49 @@ func (self *tableScanGen) genOneTab(
 				},
 			)
 
-			for _, set := range stmt.Set {
-				self.writer.Line(
-					"$%[idx] = %[value];",
-					awkWriterCtx{
-						"idx":   set.Column,
-						"value": self.cg.genExpr(set.Value),
-					},
-				)
+			if len(stmt.Set) > 0 {
+				// We purposely split the rewriting phase into 2 separate loops, instead
+				// of modifying the column field in place. The reason is as following,
+				// assume user writing following code:
+				//
+				// rewrite
+				//   when $1 == 100 then set $1 = 20, $2=$1
+				// ...
+				// The second assignment depends on $1, which is modified in first when
+				// clause. If we allowed the modification of first clause to be reflected
+				// inside of the second assignment, this means there's an execution order
+				// of all the when clause, which is not something we want, and we should
+				// not. Instead, we do not have any forced order of execution for all the
+				// clause in rewrite stage. Therefore, the second assignment of $2 should
+				// see $1's value before modification.
+				//
+				// To address this issue, we have 2 separate loops. The first loop will
+				// do the modification and set the modified value into *temporary*
+				// local variables, and then the second 2 loop will move the temporary
+				// value into its final destination directly.
+
+				for _, set := range stmt.Set {
+					self.writer.Line(
+						"%[tmp] = %[value];",
+						awkWriterCtx{
+							"idx":   set.Column,
+							"tmp":   self.writer.LocalN("tmp_value", set.Column),
+							"value": self.cg.genExpr(set.Value),
+						},
+					)
+				}
+
+				for _, set := range stmt.Set {
+					self.writer.Line(
+						"$%[idx] = %[tmp];",
+						awkWriterCtx{
+							"idx": set.Column,
+							"tmp": self.writer.LocalN("tmp_value", set.Column),
+						},
+					)
+				}
+			} else {
+				self.writer.Line("next;", nil)
 			}
 			self.writer.IfEnd()
 		}

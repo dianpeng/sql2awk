@@ -213,7 +213,9 @@ func (self *Plan) resolveAliasId(id string, cn *sql.CanName) error {
 		cn.SetRef(alias)
 	} else if self.isGlobalVariable(id) {
 		cn.SetGlobal()
-	} else {
+	} else if id != "*" {
+		// notes: we use * Ref as a special way to mark that wildcard parameter
+		//   for aggregation parameter, which we may need to fix it in the future
 		return self.err("resolve-symbol", "id: %s is unknown", id)
 	}
 	return nil

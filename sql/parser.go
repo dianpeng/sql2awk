@@ -560,8 +560,9 @@ func (self *Parser) parseFrom() (*From, error) {
 
 func (self *Parser) parseRewrite() (*Rewrite, error) {
 	start := self.posStart()
-	self.L.Next()
 	out := &Rewrite{}
+
+	self.L.Next()
 
 	// when list
 	for self.L.Token != TkEnd {
@@ -610,6 +611,7 @@ func (self *Parser) parseRewrite() (*Rewrite, error) {
 				} else {
 					set.Value = expr
 				}
+				clause.Set = append(clause.Set, set)
 
 				// allow multiple set with dangling comma, ie user can write as
 				// then set $1=1, $2=2, $3=3 ...
@@ -618,7 +620,6 @@ func (self *Parser) parseRewrite() (*Rewrite, error) {
 				} else {
 					break
 				}
-				clause.Set = append(clause.Set, set)
 			}
 			break
 		default:
@@ -1122,7 +1123,7 @@ loop:
 			break
 
 		case TkLPar:
-			call, err := self.parseSuffixCall()
+			call, err := self.parseSuffixCall(atomic)
 			if err != nil {
 				return nil, err
 			}
@@ -1202,16 +1203,42 @@ func (self *Parser) parseSuffixIndex() (*Suffix, error) {
 	}, nil
 }
 
-func (self *Parser) parseSuffixCall() (*Suffix, error) {
+func (self *Parser) isAggFunc(leading Expr) bool {
+	if leading.Type() == ExprRef {
+		ref := leading.(*Ref)
+		return IsAggFunc(ref.Id)
+	}
+	return false
+}
+
+func (self *Parser) parseSuffixCall(leading Expr) (*Suffix, error) {
 	start := self.posStart()
 
 	params := []Expr{}
 
 	if self.L.Next() != TkRPar {
 		for self.L.Token != TkRPar {
-			expr, err := self.parseExpr()
-			if err != nil {
-				return nil, err
+			var expr Expr
+
+			if self.L.Token == TkMul {
+				start := self.posStart()
+				self.L.Next()
+				if self.isAggFunc(leading) {
+					// notes(dpeng):
+					// the plan.agg phase will correctly resolve it later on by replacing
+					// it with a constant or failed when certain function like min/max/sum
+					// which cannot deal with */wildcard parameter
+					expr = &Ref{
+						CodeInfo: self.currentCodeInfo(start),
+						Id:       "*",
+					}
+				}
+			} else {
+				if e, err := self.parseExpr(); err != nil {
+					return nil, err
+				} else {
+					expr = e
+				}
 			}
 			params = append(params, expr)
 			if self.L.Token == TkComma {
