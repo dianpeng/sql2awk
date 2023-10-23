@@ -65,7 +65,7 @@ const tableScanTemplate = `
   }
 `
 
-func newTemplate(
+func newtemplate(
 	xx string,
 ) (*template.Template, error) {
 	return template.New("[template]").Parse(xx)
@@ -83,7 +83,7 @@ func (self *tableScanGen) genOneTab(
 	start := ts.Table.Params.AsInt(1, -1)
 	end := ts.Table.Params.AsInt(2, -1)
 
-	t, err := newTemplate(
+	t, err := newtemplate(
 		tableScanTemplate,
 	)
 	if err != nil {

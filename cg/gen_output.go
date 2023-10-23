@@ -123,8 +123,6 @@ func (self *outputCodeGenWildcard) genVarOutput(plan *plan.Output) error {
 			"sep": self.cg.formatSep(),
 		},
 	)
-
-	self.writer.Line("printf(\"\\n\")", nil)
 	return nil
 }
 

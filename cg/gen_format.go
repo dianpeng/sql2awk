@@ -17,7 +17,7 @@ func (self *formatCodeGen) setWriter(w *awkWriter) {
 	self.writer = w
 }
 
-func (self *formatCodeGen) mapColor(
+func mapcolor(
 	c int,
 ) color.Attribute {
 	switch c {
@@ -48,7 +48,7 @@ func (self *formatCodeGen) outputAlignSize() int {
 	return self.cg.formatPaddingSize()
 }
 
-func (self *formatCodeGen) lit(
+func lit(
 	input string,
 	replace string,
 	quote bool,
@@ -78,12 +78,12 @@ func (self *formatCodeGen) lit(
 	return buf.String()
 }
 
-func (self *formatCodeGen) stylish(
+func stylish(
 	fins *plan.FormatInstruction,
 	vname string,
 	quote bool,
 ) string {
-	cobj := color.New(self.mapColor(fins.Color))
+	cobj := color.New(mapcolor(fins.Color))
 	if fins.Bold {
 		cobj.Add(color.Bold)
 	}
@@ -93,7 +93,7 @@ func (self *formatCodeGen) stylish(
 	if fins.Italic {
 		cobj.Add(color.Italic)
 	}
-	return self.lit(cobj.Sprintf("%s", "#"), vname, quote)
+	return lit(cobj.Sprintf("%s", "#"), vname, quote)
 }
 
 // special function that generate the title format. This will be called before
@@ -131,7 +131,7 @@ func (self *formatCodeGen) titleFormat(
 	x := strings.Join(
 		[]string{
 			"\"",
-			self.stylish(title, titleBar, false),
+			stylish(title, titleBar, false),
 			sep,
 			"\"",
 		},
@@ -169,59 +169,55 @@ print("%[del]");
 }
 
 func (self *formatCodeGen) genPrologue() {
-	self.title()
+	if self.cg.query.Output.Wildcard {
+		title := self.cg.query.Format.GetTitle()
+		if title.Ignore {
+			return
+		}
+		self.writer.Call(
+			"format_wildcard_title",
+			nil,
+		)
+	} else {
+		self.title()
+	}
 }
 
 func (self *formatCodeGen) genEpilogue() {
-	f := self.cg.query.Format
-	title := f.GetTitle()
-	sep := f.GetBorderString()
+	if self.cg.query.Output.Wildcard {
+		title := self.cg.query.Format.GetTitle()
+		if title.Ignore {
+			return
+		}
+		self.writer.Call(
+			"format_wildcard_title_foot",
+			nil,
+		)
+	} else {
+		f := self.cg.query.Format
+		title := f.GetTitle()
+		sep := f.GetBorderString()
 
-	if title.Ignore {
-		return
+		if title.Ignore {
+			return
+		}
+
+		_, del := self.titleFormat(
+			title,
+			self.cg.query.Output,
+			sep,
+		)
+		self.writer.Line(
+			`print("%[del]");`,
+			awkWriterCtx{
+				"del": del,
+			},
+		)
 	}
-
-	_, del := self.titleFormat(
-		title,
-		self.cg.query.Output,
-		sep,
-	)
-	self.writer.Line(
-		`print("%[del]");`,
-		awkWriterCtx{
-			"del": del,
-		},
-	)
 }
 
 func (self *formatCodeGen) fmtStr() string {
 	return fmt.Sprintf("%%-%ds", self.outputAlignSize())
-}
-
-func generateFormatPrologue(cg *queryCodeGen) (string, *awkGlobalFromFunc) {
-	w, f := newAwkWriter(
-		0,
-		"format_prologue",
-	)
-	fmtCG := &formatCodeGen{
-		cg:     cg,
-		writer: w,
-	}
-	fmtCG.genPrologue()
-	return fmtCG.writer.Flush(), f
-}
-
-func generateFormatEpilogue(cg *queryCodeGen) (string, *awkGlobalFromFunc) {
-	w, f := newAwkWriter(
-		0,
-		"format_epilogue",
-	)
-	fmtCG := &formatCodeGen{
-		cg:     cg,
-		writer: w,
-	}
-	fmtCG.genEpilogue()
-	return fmtCG.writer.Flush(), f
 }
 
 func (self *formatCodeGen) genFormatFallbackFormat() {
@@ -246,7 +242,7 @@ if (is_number(rid_0)) {
 }
 `,
 				awkWriterCtx{
-					"fmt": self.stylish(f.Number, fmtStr, false),
+					"fmt": stylish(f.Number, fmtStr, false),
 				},
 			)
 		}
@@ -259,7 +255,7 @@ if (is_string(rid_0)) {
 }
 `,
 				awkWriterCtx{
-					"fmt": self.stylish(f.String, fmtStr, false),
+					"fmt": stylish(f.String, fmtStr, false),
 				},
 			)
 		}
@@ -268,7 +264,7 @@ if (is_string(rid_0)) {
 			self.writer.Chunk(
 				`return "%[fmt]";`,
 				awkWriterCtx{
-					"fmt": self.stylish(f.Rest, fmtStr, false),
+					"fmt": stylish(f.Rest, fmtStr, false),
 				},
 			)
 		} else {
@@ -306,7 +302,7 @@ if (is_number(rid_0)) {
 }
 `,
 				awkWriterCtx{
-					"fmt": self.stylish(f.Number, fmtStr, false),
+					"fmt": stylish(f.Number, fmtStr, false),
 					"sep": self.cg.formatSep(),
 				},
 			)
@@ -321,7 +317,7 @@ if (is_string(rid_0)) {
 }
 `,
 				awkWriterCtx{
-					"fmt": self.stylish(f.String, fmtStr, false),
+					"fmt": stylish(f.String, fmtStr, false),
 					"sep": self.cg.formatSep(),
 				},
 			)
@@ -334,7 +330,7 @@ sprintf("%[sep]%[fmt]", rid_0);
 return;
 `,
 				awkWriterCtx{
-					"fmt": self.stylish(f.Rest, fmtStr, false),
+					"fmt": stylish(f.Rest, fmtStr, false),
 					"sep": self.cg.formatSep(),
 				},
 			)
@@ -364,7 +360,7 @@ if (rid_0 == %[col_idx]) {
 `,
 			awkWriterCtx{
 				"col_idx": y.Index,
-				"fmt":     self.stylish(y, fmtStr, false),
+				"fmt":     stylish(y, fmtStr, false),
 				"sep":     self.cg.formatSep(),
 			},
 		)
@@ -384,6 +380,156 @@ if (rid_0 == %[col_idx]) {
 			},
 		)
 	}
+}
+
+func (self *formatCodeGen) fallbackStyle(
+	loc string,
+	f *plan.Format,
+	fmtStr string,
+) string {
+	if f.HasTypeFormat() {
+		return fmt.Sprintf(
+			"format_fallback_format(%s)",
+			loc,
+		)
+	} else {
+		return fmtStr
+	}
+}
+
+func (self *formatCodeGen) columnFormat(
+	f *plan.Format,
+	idx int,
+	fmtStr string,
+) string {
+	if ff := f.GetColumn(idx); ff != nil {
+		return stylish(ff, fmtStr, false)
+	} else {
+		// if there's no column formatter, try to check whether we have type related
+		// formatter or not
+		return self.fallbackStyle(self.writer.rid(idx), f, fmtStr)
+	}
+}
+
+func (self *formatCodeGen) genNext() error {
+	output := self.cg.query.Output
+	if len(output.VarList) > 0 {
+		f := self.cg.query.Format
+		self.writer.oIndent()
+		self.writer.o("printf \"")
+		for idx, _ := range output.VarList {
+			self.writer.o(self.cg.formatSep())
+			fmtStr := self.fmtStr()
+			self.writer.o(self.columnFormat(f, idx, fmtStr))
+		}
+		self.writer.o(self.cg.formatSep())
+		self.writer.o("\",")
+
+		self.writer.o(self.writer.ridParamStrList(self.cg.outputSize()))
+		self.writer.o(";")
+		self.writer.oLB()
+	}
+	return nil
+}
+
+func (self *formatCodeGen) genFlush() error {
+	return nil
+}
+
+func (self *formatCodeGen) genDone() error {
+	return nil
+}
+
+// Special builtin function for handling title and footbar of wildcard search
+// which we do not know the scheme before scanning them yet. Each table will
+// have 3 special global variables correspondingly
+// 1) tbl#    : table itself, contains needed datitem
+// 2) tblsize#: table's row size, used for iteration purpose
+// 3) tblfnum#: table's column size, used for scanning field of each row
+//
+// We are just interesting in tblfnum# which can be used for us to generate
+// title bar. Notes, we do not have literal way to represent the table's column
+// because of the obvious reason, we do not have a schema.
+func generateWildcardTitle(
+	cg *queryCodeGen,
+) (string, *awkGlobalFromFunc) {
+	writer, f := newAwkWriter(
+		0,
+		"format_wildcard_title",
+	)
+	writer.Line("$[l, csize] = 0;", nil)
+
+	for idx, _ := range cg.query.TableScan {
+		writer.Line(`$[l, csize] += %[size]`,
+			awkWriterCtx{
+				"size": cg.varTableField(idx),
+			},
+		)
+	}
+
+	titleFmt := cg.query.Format.Title
+	titleBar := cg.query.Format.GetBorderString()
+
+	writer.Chunk(
+		`
+$[l, title]="";
+$[g, wildcard_title_bar_sep]="";
+for ($[l, i] = 0; $[l, i] < $[l, csize]; $[l, i]++) {
+  $[l, title] = sprintf("%s%[sep]%-%[padding]s", $[l, title], sprintf("$%d", $[l, i]));
+}
+
+for ($[l, i] = 0; $[l, i] < length($[l, title])+1; $[l, i]++) {
+  $[g, wildcard_title_bar_sep] = sprintf("%s-", $[g, wildcard_title_bar_sep]);
+}
+
+printf("%s\n", $[g, wildcard_title_bar_sep]);
+printf("%[fmt]%[sep]\n", $[l, title]);
+printf("%s\n", $[g, wildcard_title_bar_sep]);
+`,
+		awkWriterCtx{
+			"sep":     titleBar,
+			"padding": fmt.Sprintf("%d", cg.formatPaddingSize()),
+			"fmt":     stylish(titleFmt, "%s", false),
+		},
+	)
+	return writer.Flush(), f
+}
+
+func generateWildcardTitleFoot(
+	cg *queryCodeGen,
+) (string, *awkGlobalFromFunc) {
+	writer, f := newAwkWriter(
+		0,
+		"format_wildcard_title_foot",
+	)
+	writer.Line(`printf("%s\n", $[g, wildcard_title_bar_sep]);`, nil)
+	return writer.Flush(), f
+}
+
+func generateFormatPrologue(cg *queryCodeGen) (string, *awkGlobalFromFunc) {
+	w, f := newAwkWriter(
+		0,
+		"format_prologue",
+	)
+	fmtCG := &formatCodeGen{
+		cg:     cg,
+		writer: w,
+	}
+	fmtCG.genPrologue()
+	return fmtCG.writer.Flush(), f
+}
+
+func generateFormatEpilogue(cg *queryCodeGen) (string, *awkGlobalFromFunc) {
+	w, f := newAwkWriter(
+		0,
+		"format_epilogue",
+	)
+	fmtCG := &formatCodeGen{
+		cg:     cg,
+		writer: w,
+	}
+	fmtCG.genEpilogue()
+	return fmtCG.writer.Flush(), f
 }
 
 func generateFormatFallbackFormat(cg *queryCodeGen) (string, *awkGlobalFromFunc) {
@@ -423,62 +569,4 @@ func generateFormatWildcardPrintColumn(cg *queryCodeGen) (string, *awkGlobalFrom
 	}
 	fmtCG.genFormatWildcardPrintColumn()
 	return fmtCG.writer.Flush(), f
-}
-
-func (self *formatCodeGen) fallbackStyle(
-	loc string,
-	f *plan.Format,
-	fmtStr string,
-) string {
-	if f.HasTypeFormat() {
-		return fmt.Sprintf(
-			"format_fallback_format(%s)",
-			loc,
-		)
-	} else {
-		return fmtStr
-	}
-}
-
-func (self *formatCodeGen) columnFormat(
-	f *plan.Format,
-	idx int,
-	fmtStr string,
-) string {
-	if ff := f.GetColumn(idx); ff != nil {
-		return self.stylish(ff, fmtStr, false)
-	} else {
-		// if there's no column formatter, try to check whether we have type related
-		// formatter or not
-		return self.fallbackStyle(self.writer.rid(idx), f, fmtStr)
-	}
-}
-
-func (self *formatCodeGen) genNext() error {
-	output := self.cg.query.Output
-	if len(output.VarList) > 0 {
-		f := self.cg.query.Format
-		self.writer.oIndent()
-		self.writer.o("printf \"")
-		for idx, _ := range output.VarList {
-			self.writer.o(self.cg.formatSep())
-			fmtStr := self.fmtStr()
-			self.writer.o(self.columnFormat(f, idx, fmtStr))
-		}
-		self.writer.o(self.cg.formatSep())
-		self.writer.o("\",")
-
-		self.writer.o(self.writer.ridParamStrList(self.cg.outputSize()))
-		self.writer.o(";")
-		self.writer.oLB()
-	}
-	return nil
-}
-
-func (self *formatCodeGen) genFlush() error {
-	return nil
-}
-
-func (self *formatCodeGen) genDone() error {
-	return nil
 }

@@ -78,13 +78,10 @@ function is_number(v, xx) {
   return xx == "number" || xx == "strnum" || xx == "number|bool";
 }
 
-function is_decimal(v) {
-  return (v - int(v)) != 0.0
-}
+# not very accurate indeed
+function is_decimal(v) { return (v - int(v)) != 0.0 }
 
-function is_integer(v) {
-  return is_number(v) && !is_decimal(v);
-}
+function is_integer(v) { return is_number(v) && !is_decimal(v); }
 
 function is_string(v, xx) {
   xx = typeof(v);
@@ -103,22 +100,10 @@ function cast(v, ty) {
   }
 }
 
-function type(v) {
-  return typeof(v);
-}
-
-function is_empty(v) {
-  return length(v) == 0;
-}
-
-function clear_array(x) {
-  split("", x);
-}
-
-function kv_make(k, v) {
-  return sprintf("%s:%s", k, v);
-}
-
+function type(v) { return typeof(v); }
+function is_empty(v) { return length(v) == 0; }
+function clear_array(x) { split("", x); }
+function kv_make(k, v) { return sprintf("%s:%s", k, v); }
 function kv_getv(kv, lv) {
   split(kv, lv, ":");
   return lv[2];
