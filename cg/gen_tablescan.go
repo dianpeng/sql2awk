@@ -147,6 +147,7 @@ func (self *tableScanGen) genOneTab(
 
 	// table gen
 	{
+		// early filter generation, if applicable
 		if filter != "" {
 			self.writer.Line(
 				`if (!(%[filter])) next;`,
@@ -155,6 +156,7 @@ func (self *tableScanGen) genOneTab(
 				},
 			)
 		}
+
 		self.writer.Chunk(
 			`
 row_idx = %[table_size];

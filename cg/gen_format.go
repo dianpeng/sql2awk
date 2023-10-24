@@ -532,14 +532,18 @@ func generateMixedWildcardTitle(
 	writer.Line("$[l, csize] = 0;", nil)
 
 	for idx, ovar := range output.VarList {
-		if ovar.TableWildcard {
+		switch ovar.Type {
+		case plan.OutputVarWildcard, plan.OutputVarRowMatch, plan.OutputVarColMatch:
 			writer.Line(`$[l, csize] += %[size];`,
 				awkWriterCtx{
 					"size": cg.varTableField(idx),
 				},
 			)
-		} else {
+			break
+
+		default:
 			writer.Line("$[l, csize]++;", nil)
+			break
 		}
 	}
 

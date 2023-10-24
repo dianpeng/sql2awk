@@ -254,7 +254,8 @@ func (self *outputCodeGenNormal) genCalc(
 	output *plan.Output,
 ) {
 	for idx, ovar := range output.VarList {
-		if ovar.TableWildcard {
+		switch ovar.Type {
+		case plan.OutputVarWildcard, plan.OutputVarRowMatch, plan.OutputVarColMatch:
 			if output.Distinct {
 				// if we have distinct, we do the dumpping, otherwise do nothing here
 				// since we cannot save wildcard column for this table into local
@@ -274,13 +275,16 @@ for ($[l, idx] = 1; $[l, idx] <= %[table_fnum]; ++$[l, idx]) {
 					},
 				)
 			}
-		} else {
+			break
+
+		default:
 			xx := self.cg.genExpr(ovar.Value)
 			self.writer.Assign(
 				self.writer.LocalN("output_val", idx),
 				fmt.Sprintf("(%s\"\")", xx),
 				nil,
 			)
+			break
 		}
 	}
 }
@@ -335,7 +339,8 @@ func (self *outputCodeGenNormal) genVarOutput(
 		self.writer.Line("$[l, cidx] = 0;", nil)
 
 		for idx, ovar := range output.VarList {
-			if ovar.TableWildcard {
+			switch ovar.Type {
+			case plan.OutputVarWildcard, plan.OutputVarRowMatch, plan.OutputVarColMatch:
 				self.writer.Chunk(
 					`
 for ($[l, idx] = 1; $[l, idx] <= %[table_fnum]; ++$[l, idx]) {
@@ -349,7 +354,8 @@ for ($[l, idx] = 1; $[l, idx] <= %[table_fnum]; ++$[l, idx]) {
 						"rid":        self.writer.rid(ovar.Table.Index),
 					},
 				)
-			} else {
+				break
+			default:
 				self.writer.Line(
 					`format_wildcard_print_column($[l, cidx], %[tmp]);`,
 					awkWriterCtx{
@@ -357,6 +363,7 @@ for ($[l, idx] = 1; $[l, idx] <= %[table_fnum]; ++$[l, idx]) {
 					},
 				)
 				self.writer.Line("$[l, cidx]++;", nil)
+				break
 			}
 		}
 		self.writer.Line(

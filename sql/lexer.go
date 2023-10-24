@@ -41,12 +41,14 @@ const (
 	TkEnd
 	TkFormat
 	TkRewrite
-	TkOutput
+	TkExport
 	TkSet
 	TkWith
 	TkWhen
 	TkYield
 	TkNext
+	TkRows
+	TkColumns
 
 	// Punctuation
 	TkComma
@@ -495,6 +497,9 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 		if self.matchKeyword("ase") {
 			return true, self.yield(TkCase, 4)
 		}
+		if self.matchKeyword("olumns") {
+			return true, self.yield(TkColumns, 7)
+		}
 		break
 
 	case 'd', 'D':
@@ -512,6 +517,9 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 		}
 		if self.matchKeyword("lse") {
 			return true, self.yield(TkElse, 4)
+		}
+		if self.matchKeyword("xport") {
+			return true, self.yield(TkExport, 6)
 		}
 		break
 
@@ -575,9 +583,6 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 		if self.matchKeyword("r") {
 			return true, self.yield(TkOr, 2)
 		}
-		if self.matchKeyword("utput") {
-			return true, self.yield(TkOutput, 6)
-		}
 		if yes, l := self.matchKeyword2("rder", "by"); yes {
 			return true, self.yield(TkOrderBy, l)
 		}
@@ -586,6 +591,9 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 	case 'r', 'R':
 		if self.matchKeyword("ewrite") {
 			return true, self.yield(TkRewrite, 7)
+		}
+		if self.matchKeyword("ows") {
+			return true, self.yield(TkRows, 4)
 		}
 		break
 

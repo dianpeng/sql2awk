@@ -82,9 +82,14 @@ const (
 	atomicExpr
 )
 
+const (
+	stageNA = iota
+	stageInProjection
+)
+
 type Parser struct {
-	L               *Lexer
-	allowSuffixStar bool // used during parsing projection var
+	L     *Lexer
+	stage int // used to notify certain grammar
 }
 
 func newParser(xx string) *Parser {
@@ -410,7 +415,7 @@ func (self *Parser) parseProjectionVar(idx int) (SelectVar, error) {
 	default:
 		var val Expr
 		alias := ""
-		self.allowSuffixStar = true
+		self.stage = stageInProjection
 
 		if e, err := self.parseExpr(); err != nil {
 			return nil, err
@@ -418,7 +423,7 @@ func (self *Parser) parseProjectionVar(idx int) (SelectVar, error) {
 			val = e
 		}
 
-		self.allowSuffixStar = false
+		self.stage = stageNA
 
 		if self.L.Token == TkAs {
 			if self.L.Next() != TkId {
@@ -1160,6 +1165,7 @@ func (self *Parser) parseSuffixDot() (*Suffix, error) {
 	start := self.posStart()
 	n := self.L.Next()
 	id := ""
+	symbol := SymbolNone
 
 	switch n {
 	case TkId, TkStr:
@@ -1167,13 +1173,22 @@ func (self *Parser) parseSuffixDot() (*Suffix, error) {
 		self.L.Next()
 		break
 
-	case TkMul:
-		if self.allowSuffixStar {
-			// allow t.* syntax to be specified
-			id = "*"
+	case TkMul, TkColumns, TkRows:
+		if self.stage == stageInProjection {
+			switch n {
+			case TkMul:
+				symbol = SymbolStar
+				break
+			case TkColumns:
+				symbol = SymbolColumns
+				break
+			default:
+				symbol = SymbolRows
+				break
+			}
 			self.L.Next()
 		} else {
-			return nil, self.err("invalid * here, must be projection")
+			return nil, self.err("invalid */COLUMNS/ROWS keyword here, must be in projection")
 		}
 		break
 
@@ -1185,6 +1200,7 @@ func (self *Parser) parseSuffixDot() (*Suffix, error) {
 	return &Suffix{
 		Ty:        SuffixDot,
 		Component: id,
+		Symbol:    symbol,
 		CodeInfo: CodeInfo{
 			Start:   start,
 			End:     end,

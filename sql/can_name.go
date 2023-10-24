@@ -10,6 +10,7 @@ const (
 	CanNameExpr
 	CanNameTableColumn
 	CanNameName
+	CanNameMatcher
 )
 
 type CanName struct {
@@ -18,6 +19,7 @@ type CanName struct {
 	Reference   Expr   // points to another expression that this name referenced with
 	Type        int    // type of can name
 	Name        string // specialized usage for early stage filter
+	Pattern     string
 }
 
 func (self *CanName) Set(tidx, cidx int) {
@@ -76,6 +78,15 @@ func (self *CanName) SetName(
 	self.Name = name
 }
 
+func (self *CanName) SetMatcher(
+	tidx int,
+	pattern string,
+) {
+	self.Type = CanNameMatcher
+	self.TableIndex = tidx
+	self.Pattern = pattern
+}
+
 func (self *CanName) SetGlobal()     { self.Type = CanNameGlobal }
 func (self *CanName) IsName() bool   { return self.Type == CanNameName }
 func (self *CanName) IsGlobal() bool { return self.Type == CanNameGlobal }
@@ -84,11 +95,10 @@ func (self *CanName) IsReference() bool {
 	return self.IsSettled() && self.Reference != nil
 }
 
-func (self *CanName) IsTableColumn() bool {
-	return self.Type == CanNameTableColumn
-}
-func (self *CanName) IsSettled() bool { return self.Type != CanNameFree }
-func (self *CanName) IsFree() bool    { return self.Type == CanNameFree }
+func (self *CanName) IsTableColumn() bool { return self.Type == CanNameTableColumn }
+func (self *CanName) IsMatcher() bool     { return self.Type == CanNameMatcher }
+func (self *CanName) IsSettled() bool     { return self.Type != CanNameFree }
+func (self *CanName) IsFree() bool        { return self.Type == CanNameFree }
 
 func (self *CanName) Reset() {
 	self.Reference = nil

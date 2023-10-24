@@ -134,6 +134,7 @@ func (self *Plan) isTableWildcard(
 	v := col.Value
 	if v.Type() == sql.ExprPrimary {
 		primary := v.(*sql.Primary)
+
 		if primary.CanName.IsTableColumn() &&
 			primary.CanName.ColumnIndex == wildcardColumnIndex {
 			// just table index is valid, okay it is a wildcard
@@ -154,20 +155,63 @@ func (self *Plan) planOutput(s *sql.Select) {
 		switch x.Type() {
 		case sql.SelectVarCol:
 			col := x.(*sql.Col)
+			value := col.Value
 
-			// check whether the column expression represent an table wildcard or not
-			if tb := self.isTableWildcard(col); tb != nil {
-				self.Output.VarList = append(self.Output.VarList, OutputVar{
-					TableWildcard: true,
-					Table:         tb,
-					Alias:         col.Alias(),
-				})
-			} else {
-				self.Output.VarList = append(self.Output.VarList, OutputVar{
-					Value: col.Value,
-					Alias: col.Alias(),
-				})
+			// The following logic is kind of tricky, mostly because of the variation
+			// SQL syntax. The key here is that primary will have all the needed
+			// information inside of the CanName. Based on CanName's value we are
+			// supposed to generate the corresponding OutputVar. The syntax is kind
+			// of messy for SQL ...
+			switch value.Type() {
+			case sql.ExprPrimary:
+				primary := value.(*sql.Primary)
+
+				if primary.CanName.IsMatcher() {
+					// If it is a matcher, we are sure that it is either a Column
+					// or row matcher
+					tidx := primary.CanName.TableIndex
+
+					if sym := primary.Suffix[0].Symbol; sym == sql.SymbolColumns {
+						self.Output.VarList.addColMatch(
+							self.tableList[tidx],
+							primary.CanName.Pattern,
+							col.Alias(),
+						)
+					} else {
+						self.Output.VarList.addRowMatch(
+							self.tableList[tidx],
+							primary.CanName.Pattern,
+							col.Alias(),
+						)
+					}
+				} else if primary.CanName.IsTableColumn() {
+					tidx := primary.CanName.TableIndex
+					if primary.CanName.ColumnIndex == wildcardColumnIndex {
+						self.Output.VarList.addWildcard(
+							self.tableList[tidx],
+							col.Alias(),
+						)
+					} else {
+						self.Output.VarList.addValue(
+							col.Value,
+							col.Alias(),
+						)
+					}
+				} else {
+					self.Output.VarList.addValue(
+						col.Value,
+						col.Alias(),
+					)
+				}
+				break
+			default:
+				self.Output.VarList.addValue(
+					col.Value,
+					col.Alias(),
+				)
+				break
 			}
+
 			break
 
 		case sql.SelectVarStar:

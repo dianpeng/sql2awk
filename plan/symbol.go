@@ -11,16 +11,31 @@ type visitorResolveSymbol struct {
 func (self *visitorResolveSymbol) resolveSymbolExprSuffix(
 	leading sql.Expr,
 	component string,
+	symbol int,
 	cn *sql.CanName,
 ) error {
 	if leading.Type() != sql.ExprRef {
 		return self.p.err("resolve-symbol", "unknown full table qualified column name")
 	}
 	tableName := leading.(*sql.Ref).Id // table name
-	colIdx := self.p.codx(component)   // column index
-	if colIdx < 0 {
-		return self.p.err("resolve-symbol", "invalid field name, must be $XX")
+	colIdx := 0
+
+	switch symbol {
+	case sql.SymbolNone:
+		colIdx = self.p.codx(component) // column index
+		if colIdx < 0 {
+			return self.p.err("resolve-symbol", "invalid field name, must be $XX")
+		}
+		break
+
+	case sql.SymbolStar:
+		colIdx = wildcardColumnIndex
+		break
+
+	default:
+		return self.p.err("resolve-symbol", "invalid field name, invalid symbol")
 	}
+
 	tableDesp := self.p.findTableDescriptorByAlias(tableName)
 	if tableDesp == nil {
 		return self.p.err("resolve-symbol", "unknown table: %s", tableName)
@@ -37,6 +52,7 @@ func (self *visitorResolveSymbol) resolveSymbolExprSuffixDot(
 	return self.resolveSymbolExprSuffix(
 		dotPrimary.Leading,
 		dotPrimary.Suffix[0].Component,
+		dotPrimary.Suffix[0].Symbol,
 		&dotPrimary.CanName,
 	)
 }
@@ -81,16 +97,87 @@ func (self *visitorResolveSymbol) AcceptTernary(
 	return true, nil
 }
 
+func (self *visitorResolveSymbol) resolveSymbolExprSuffixTableMatcher(
+	primary *sql.Primary,
+) error {
+	// this *MUST BE* a row/column filter, which has special Symbol during the
+	// parser.
+	leading := primary.Leading
+	if leading.Type() != sql.ExprRef {
+		return self.p.err(
+			"resolve-symbol",
+			"table level pattern matcher, the selector must be a table alias name",
+		)
+	}
+	colOrRow := primary.Suffix[0]
+
+	if colOrRow.Ty != sql.SuffixDot &&
+		(colOrRow.Symbol != sql.SymbolColumns && colOrRow.Symbol != sql.SymbolRows) {
+		return self.p.err(
+			"resolve-symbol",
+			"table level pattern matcher, ROWS/COLUMNS keyword must follow table selector",
+		)
+	}
+
+	pattern := primary.Suffix[1]
+	if pattern.Ty != sql.SuffixCall || len(pattern.Call.Parameters) != 1 {
+		return self.p.err(
+			"resolve-symbol",
+			"table level pattern matcher, ROWS/COLUMNS keyword must be a call with "+
+				"regex pattern as its only parameters",
+		)
+	}
+
+	if pexpr := pattern.Call.Parameters[0]; pexpr.Type() != sql.ExprConst || pexpr.(*sql.Const).Ty != sql.ConstStr {
+		return self.p.err(
+			"resolve-symbol",
+			"table level pattern matcher, ROWS/COLUMNS keyword must be a call with "+
+				"string parameter served as regex pattern",
+		)
+	}
+
+	tableName := leading.(*sql.Ref).Id
+	tableDesp := self.p.findTableDescriptorByAlias(tableName)
+	if tableDesp == nil {
+		return self.p.err("resolve-symbol", "unknown table: %s", tableName)
+	}
+
+	primary.CanName.SetMatcher(
+		tableDesp.Index, // index of the table
+		pattern.Call.Parameters[0].(*sql.Const).String, // pattern
+	)
+	return nil
+}
+
 func (self *visitorResolveSymbol) AcceptPrimary(
 	primary *sql.Primary,
 ) (bool, error) {
-	if len(primary.Suffix) >= 2 {
+
+	// Arity check here, we should do this maybe inside of semantic checking but
+	// kind of hard to separate sinec the sema check happened *after* the symbol
+	// resolution phase.
+	//
+	// For now, the only allowed suffix expression is as following
+	// 1) a.b, notes a.b.c is impossible since we do not have nested table row
+	// 2) a(), which is function call or aggregation function call
+	// 3) a.b(...), this is possible since we allow special column/row matching
+	//    syntax, ie t1.COLUMNS("regex"), t1.ROWS("regex"),
+	// 4) a.*, this means for table a, select all its columns
+	//
+	// above all, the arity of the primary can only be at most 2
+
+	if len(primary.Suffix) > 2 {
 		// this is impossible for now, since our SQL does not allow list/map
 		// compound type and subscript of these types
 		return false, self.p.err("resolve-symbol", "invalid suffix expression nesting")
 	}
 
-	if len(primary.Suffix) == 1 {
+	suffixLen := len(primary.Suffix)
+	switch suffixLen {
+	default:
+		break
+
+	case 1:
 		suff := primary.Suffix[0]
 		switch suff.Ty {
 		case sql.SuffixDot:
@@ -108,6 +195,13 @@ func (self *visitorResolveSymbol) AcceptPrimary(
 		default:
 			break
 		}
+		break
+
+	case 2:
+		if err := self.resolveSymbolExprSuffixTableMatcher(primary); err != nil {
+			return false, err
+		}
+		break
 	}
 
 	return true, nil

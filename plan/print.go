@@ -124,7 +124,8 @@ func (self *Plan) printOutput(
 	buf.WriteString(fmt.Sprintf("Distinct: %v\n", output.Distinct))
 
 	for idx, ovar := range output.VarList {
-		if ovar.TableWildcard {
+		switch ovar.Type {
+		case OutputVarWildcard:
 			buf.WriteString(
 				fmt.Sprintf(
 					"Var[%d]: %s\n",
@@ -132,8 +133,31 @@ func (self *Plan) printOutput(
 					fmt.Sprintf("tbl[%d].*", ovar.Table.Index),
 				),
 			)
-		} else {
+			break
+
+		case OutputVarRowMatch:
+			buf.WriteString(
+				fmt.Sprintf(
+					"Var[%d]: %s\n",
+					idx,
+					fmt.Sprintf(".ROWS(%s)", ovar.Pattern),
+				),
+			)
+			break
+
+		case OutputVarColMatch:
+			buf.WriteString(
+				fmt.Sprintf(
+					"Var[%d]: %s\n",
+					idx,
+					fmt.Sprintf(".COLUMNS(%s)", ovar.Pattern),
+				),
+			)
+			break
+
+		default:
 			buf.WriteString(fmt.Sprintf("Var[%d]: %s\n", idx, sql.PrintExpr(ovar.Value)))
+			break
 		}
 	}
 

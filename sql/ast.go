@@ -225,6 +225,13 @@ type Const struct {
 
 type ConstList []*Const
 
+const (
+	SymbolNone = iota
+	SymbolStar
+	SymbolColumns
+	SymbolRows
+)
+
 type Ref struct {
 	Id       string
 	CodeInfo CodeInfo
@@ -241,6 +248,7 @@ type Suffix struct {
 	Call      *Call
 	Index     Expr
 	Component string
+	Symbol    int // used along with component, when Ty is Dot, to indicate internal symbol
 	CodeInfo  CodeInfo
 }
 

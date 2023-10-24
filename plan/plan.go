@@ -49,6 +49,10 @@ const (
 	aggTableIndex = -1
 )
 
+const (
+	wildcardColumnIndex = math.MaxInt
+)
+
 type Options []interface{}
 
 // comming from Rewrite syntax. Used to represent manipulation of scanning of
@@ -195,27 +199,100 @@ type Sort struct {
 	VarList []sql.Expr // list of variable needs to be sorted, *same* as Output
 }
 
+const (
+	OutputVarValue = iota
+	OutputVarWildcard
+	OutputVarRowMatch
+	OutputVarColMatch
+)
+
 type OutputVar struct {
-	Value         sql.Expr         // an expression
-	TableWildcard bool             // a table wildcard
-	Table         *TableDescriptor // which table
-	Alias         string           // alias of the output var
+	Type    int              // type of the output var
+	Value   sql.Expr         // an expression
+	Table   *TableDescriptor // which table the wildcard is bounded
+	Pattern string           // used for pattern matching of ROWS/COLUMNS
+	Alias   string           // alias of the output var
+}
+
+type OutputVarList []OutputVar
+
+func (self *OutputVarList) addValue(
+	v sql.Expr,
+	a string,
+) {
+	*self = append(*self, OutputVar{
+		Type:  OutputVarValue,
+		Value: v,
+		Alias: a,
+	})
+}
+
+func (self *OutputVarList) addWildcard(
+	t *TableDescriptor,
+	a string,
+) {
+	*self = append(*self, OutputVar{
+		Type:  OutputVarWildcard,
+		Table: t,
+		Alias: a,
+	})
+}
+
+func (self *OutputVarList) addRowMatch(
+	t *TableDescriptor,
+	p string,
+	a string,
+) {
+	*self = append(*self, OutputVar{
+		Type:    OutputVarRowMatch,
+		Table:   t,
+		Pattern: p,
+		Alias:   a,
+	})
+}
+
+func (self *OutputVarList) addColMatch(
+	t *TableDescriptor,
+	p string,
+	a string,
+) {
+	*self = append(*self, OutputVar{
+		Type:    OutputVarColMatch,
+		Table:   t,
+		Pattern: p,
+		Alias:   a,
+	})
 }
 
 // Output phase, basically just print out everything. This is related to the
 // selected vars
 type Output struct {
-	VarList []OutputVar // output variable list
+	VarList  OutputVarList // output variable list
+	VarSize  int           // size of variable that will be output, considering wildcard
+	Wildcard bool          // whether select * shows up
+	Limit    int64         // maximum allowed entries output
+	Distinct bool          // whether perform distinct operation for the output
+}
 
-	VarSize  int   // size of variable that will be output, considering wildcard
-	Wildcard bool  // whether select * shows up
-	Limit    int64 // maximum allowed entries output
-	Distinct bool  // whether perform distinct operation for the output
+func (self *OutputVar) IsTableWildcard() bool {
+	return self.Type == OutputVarWildcard
+}
+
+func (self *OutputVar) IsRowMatch() bool {
+	return self.Type == OutputVarRowMatch
+}
+
+func (self *OutputVar) IsColMatch() bool {
+	return self.Type == OutputVarColMatch
+}
+
+func (self *OutputVar) IsValue() bool {
+	return self.Type == OutputVarValue
 }
 
 func (self *Output) HasTableWildcard() bool {
 	for _, x := range self.VarList {
-		if x.TableWildcard {
+		if x.IsTableWildcard() {
 			return true
 		}
 	}
@@ -395,16 +472,12 @@ func (self *Plan) totalTableColumnSize() int {
 	return cnt
 }
 
-const wildcardColumnIndex = math.MaxInt
-
 // parse a column index into its corresponding index value. Each column index
 // must be in format as $#, # represent the number, and the number should be
 // positive and less than the config.MaxColumnSize
 func (self *Plan) codx(c string) int {
 	if len(c) == 0 {
 		return -1
-	} else if c == "*" {
-		return wildcardColumnIndex
 	}
 
 	r, _ := utf8.DecodeRuneInString(c)
