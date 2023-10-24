@@ -39,7 +39,7 @@ func (self *Plan) semaCheckGroupBy(s *sql.Select) error {
 
 		// check all the accessed vars, that is not showed up inside of the agg must
 		// shows up inside of group by
-		if !s.Projection.HasWildcard() {
+		if !s.Projection.HasStar() {
 			projectInfo := newExprTableAccessSet()
 
 			// collect all the projection value's table and field access info notes
@@ -107,7 +107,7 @@ func (self *Plan) semaCheckHavingAgg(
 }
 
 func (self *Plan) semaCheckWildcard(s *sql.Select) error {
-	if s.Projection.HasWildcard() {
+	if s.Projection.HasStar() {
 		projectionHasAgg, _ := self.semaCheckProjectionAgg(s.Projection) // projection has agg
 		havingHasAgg := self.semaCheckHavingAgg(s.Having)                // having has agg
 		if havingHasAgg && !projectionHasAgg {

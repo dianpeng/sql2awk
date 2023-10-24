@@ -12,11 +12,6 @@ from tab("/tmp/t1.txt")
 where regexp_is_match($2, "...")
 @==================
 
-@![save]
-@!path:/tmp/sqlx.txt
-@@@@@@@@@@@@@@
-@===================
-
 @![result]
 @@@@@@@@@@@@@@
 HELLOWORLD

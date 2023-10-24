@@ -1,18 +1,17 @@
 @![sql]
 @@@@@@@@@@@@@@@
-select t1.*
-from tab("/tmp/t2.txt") as t1
+select t.COLUMNS("2")
+from tab("/tmp/t2.txt") as t
 @=====================
 
 @![table]
 @!name:/tmp/t2.txt
 @@@@@@@@
-10 20 30 40
-3 4 5 6
+2 3 a
+4 5 b
 @==================
 
 @![result]
 @@@@@@@@
-10 20 30 40
-3 4 5 6
+2
 @==================

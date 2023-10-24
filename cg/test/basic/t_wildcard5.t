@@ -1,7 +1,7 @@
 @![sql]
 @@@@@@@@@@@@@@@
-select t1.*
-from tab("/tmp/t2.txt") as t1
+select ROWS(".*")
+from tab("/tmp/t2.txt")
 @=====================
 
 @![table]

@@ -99,7 +99,7 @@ type Projection struct {
 	ValueList SelectVarList
 }
 
-func (self *SelectVarList) HasWildcard() bool {
+func (self *SelectVarList) HasStar() bool {
 	for _, y := range *self {
 		if y.Type() == SelectVarStar {
 			return true
@@ -108,8 +108,8 @@ func (self *SelectVarList) HasWildcard() bool {
 	return false
 }
 
-func (self *Projection) HasWildcard() bool {
-	return self.ValueList.HasWildcard()
+func (self *Projection) HasStar() bool {
+	return self.ValueList.HasStar()
 }
 
 type ColName struct {

@@ -18,8 +18,12 @@ func (self *visitorResolveSymbol) resolveSymbolExprSuffix(
 		return self.p.err("resolve-symbol", "unknown full table qualified column name")
 	}
 	tableName := leading.(*sql.Ref).Id // table name
-	colIdx := 0
+	tableDesp := self.p.findTableDescriptorByAlias(tableName)
+	if tableDesp == nil {
+		return self.p.err("resolve-symbol", "unknown table: %s", tableName)
+	}
 
+	colIdx := 0
 	switch symbol {
 	case sql.SymbolNone:
 		colIdx = self.p.codx(component) // column index
@@ -30,15 +34,11 @@ func (self *visitorResolveSymbol) resolveSymbolExprSuffix(
 
 	case sql.SymbolStar:
 		colIdx = wildcardColumnIndex
+		tableDesp.SetFullColumn(self.p.Config.MaxColumnSize)
 		break
 
 	default:
 		return self.p.err("resolve-symbol", "invalid field name, invalid symbol")
-	}
-
-	tableDesp := self.p.findTableDescriptorByAlias(tableName)
-	if tableDesp == nil {
-		return self.p.err("resolve-symbol", "unknown table: %s", tableName)
 	}
 
 	cn.Set(tableDesp.Index, colIdx)
@@ -126,6 +126,7 @@ func (self *visitorResolveSymbol) resolveSymbolExprSuffixTableMatcher(
 		}
 		pattern = primary.Suffix[0]
 		tidx = wildcardTableIndex
+		self.p.setAllTableFullColumn()
 		break
 
 	case sql.SymbolNone:
@@ -146,6 +147,7 @@ func (self *visitorResolveSymbol) resolveSymbolExprSuffixTableMatcher(
 				return self.p.err("resolve-symbol", "unknown table: %s", tableName)
 			}
 			tidx = tableDesp.Index
+			tableDesp.SetFullColumn(self.p.Config.MaxColumnSize)
 		} else {
 			return nil // just a function call
 		}
@@ -274,9 +276,7 @@ func (self *Plan) canonicalize(s *sql.Select) error {
 		s.Projection.ValueList[0].Type() == sql.SelectVarStar {
 		// quick check for *star* style select, ie select * from xxxxx, etc ...
 		// we will have to update *all*
-		for _, x := range self.tableList {
-			x.SetFullColumn()
-		}
+		self.setAllTableFullColumn()
 	} else {
 		for _, x := range s.Projection.ValueList {
 			col := x.(*sql.Col) // must be col

@@ -301,7 +301,7 @@ func (self *OutputVar) IsValue() bool {
 
 func (self *Output) HasTableWildcard() bool {
 	for _, x := range self.VarList {
-		if x.IsTableWildcard() {
+		if !x.IsValue() {
 			return true
 		}
 	}
@@ -414,7 +414,10 @@ func (self *TableDescriptor) UpdateColumnIndex(cidx int) {
 	}
 }
 
-func (self *TableDescriptor) SetFullColumn() { self.FullColumn = true }
+func (self *TableDescriptor) SetFullColumn(v int) {
+	self.MaxColumn = v
+	self.FullColumn = true
+}
 
 func (self *Plan) HasJoin() bool    { return len(self.tableList) > 0 }
 func (self *Plan) HasGroupBy() bool { return self.GroupBy != nil }
@@ -479,6 +482,12 @@ func (self *Plan) totalTableColumnSize() int {
 		cnt += x.MaxColumn
 	}
 	return cnt
+}
+
+func (self *Plan) setAllTableFullColumn() {
+	for _, x := range self.tableList {
+		x.SetFullColumn(self.Config.MaxColumnSize)
+	}
 }
 
 // parse a column index into its corresponding index value. Each column index

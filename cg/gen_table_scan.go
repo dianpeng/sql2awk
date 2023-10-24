@@ -173,7 +173,7 @@ func (self *tableScanGen) genOneTab(
 		if ts.RowFilter != nil {
 			rFilter := ts.RowFilter // using regex here
 			self.writer.Line(
-				`if (match($0, "%[r]") ==0) next;`,
+				`if (!($0 ~ /%[r]/)) next;`,
 				awkWriterCtx{
 					"r": rFilter.Pattern,
 				},
@@ -190,11 +190,11 @@ func (self *tableScanGen) genOneTab(
 				`
 $[l, mod_idx] = 1; # modification purpose
 for ($[l, cf_i] = 1; $[l, cf_i] <= NF; $[l, cf_i]++) {
-  if (match($[l, cf_i], "%[r]") == 0) continue;
-  $$[l, mod_idx] = $[l, cf_i];
+  if (!($$[l, cf_i] ~ /%[r]/)) continue;
+  $$[l, mod_idx] = $$[l, cf_i];
   $[l, mod_idx]++;
 }
-NF = $[l, mod_idx];
+NF = $[l, mod_idx] - 1;
 `,
 				awkWriterCtx{
 					"r": ts.ColFilter.Pattern,

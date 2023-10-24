@@ -479,7 +479,7 @@ func (self *Parser) parseProjection() (*Projection, error) {
 			if n, err := self.parseProjectionVar(idx); err != nil {
 				return err
 			} else {
-				if x.HasWildcard() {
+				if x.HasStar() {
 					return self.err("duplicated */wildcard specified")
 				}
 				x = append(x, n)
@@ -1441,6 +1441,7 @@ func (self *Parser) parseAtomic() (Expr, error) {
 	var id string
 	var expr Expr
 	var ty int
+	sym := 0
 
 	start := self.posStart()
 
@@ -1462,6 +1463,21 @@ func (self *Parser) parseAtomic() (Expr, error) {
 		ty = atomicId
 		id = self.L.Lexeme.Text
 		self.L.Next()
+		break
+
+	case TkColumns, TkRows:
+		if self.stage == stageInProjection {
+			if self.L.Token == TkColumns {
+				sym = SymbolColumns
+			} else {
+				sym = SymbolRows
+			}
+			ty = atomicId
+			id = ""
+			self.L.Next()
+		} else {
+			return nil, self.err("COLUMNS/ROWS can only in projection")
+		}
 		break
 
 	case TkLPar:
@@ -1489,7 +1505,8 @@ func (self *Parser) parseAtomic() (Expr, error) {
 
 	case atomicId:
 		return &Ref{
-			Id: id,
+			Id:     id,
+			Symbol: sym,
 			CodeInfo: CodeInfo{
 				Start:   start,
 				End:     end,
