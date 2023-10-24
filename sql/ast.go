@@ -236,6 +236,7 @@ type Ref struct {
 	Id       string
 	CodeInfo CodeInfo
 	CanName  CanName
+	Symbol   int
 }
 
 type Call struct {

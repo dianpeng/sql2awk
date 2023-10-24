@@ -20,6 +20,7 @@ type CanName struct {
 	Type        int    // type of can name
 	Name        string // specialized usage for early stage filter
 	Pattern     string
+	Symbol      int
 }
 
 func (self *CanName) Set(tidx, cidx int) {
@@ -80,11 +81,13 @@ func (self *CanName) SetName(
 
 func (self *CanName) SetMatcher(
 	tidx int,
+	sym int,
 	pattern string,
 ) {
 	self.Type = CanNameMatcher
 	self.TableIndex = tidx
 	self.Pattern = pattern
+	self.Symbol = sym
 }
 
 func (self *CanName) SetGlobal()     { self.Type = CanNameGlobal }

@@ -170,19 +170,53 @@ func (self *Plan) planOutput(s *sql.Select) {
 					// If it is a matcher, we are sure that it is either a Column
 					// or row matcher
 					tidx := primary.CanName.TableIndex
+					sym := primary.CanName.Symbol
+					pattern := primary.CanName.Pattern
 
-					if sym := primary.Suffix[0].Symbol; sym == sql.SymbolColumns {
+					addCol := func(idx int) {
 						self.Output.VarList.addColMatch(
-							self.tableList[tidx],
-							primary.CanName.Pattern,
+							self.tableList[idx],
+							pattern,
 							col.Alias(),
 						)
-					} else {
+						self.TableScan[idx].ColFilter = &TableMatcher{
+							Match:   OutputVarColMatch,
+							Pattern: pattern,
+						}
+					}
+
+					addRow := func(idx int) {
 						self.Output.VarList.addRowMatch(
-							self.tableList[tidx],
-							primary.CanName.Pattern,
+							self.tableList[idx],
+							pattern,
 							col.Alias(),
 						)
+						self.TableScan[idx].RowFilter = &TableMatcher{
+							Match:   OutputVarRowMatch,
+							Pattern: pattern,
+						}
+					}
+
+					if tidx == wildcardTableIndex {
+						// wildcard table, which means *all* the table will use this one
+						// we need to generate a matcher *for all the table scan*
+						for idx, _ := range self.TableScan {
+							switch sym {
+							case sql.SymbolColumns:
+								addCol(idx)
+								break
+
+							default:
+								addRow(idx)
+								break
+							}
+						}
+					} else {
+						if sym == sql.SymbolColumns {
+							addCol(tidx)
+						} else {
+							addRow(tidx)
+						}
 					}
 				} else if primary.CanName.IsTableColumn() {
 					tidx := primary.CanName.TableIndex

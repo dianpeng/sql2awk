@@ -103,23 +103,61 @@ func (self *visitorResolveSymbol) resolveSymbolExprSuffixTableMatcher(
 	// this *MUST BE* a row/column filter, which has special Symbol during the
 	// parser.
 	leading := primary.Leading
+
 	if leading.Type() != sql.ExprRef {
 		return self.p.err(
 			"resolve-symbol",
-			"table level pattern matcher, the selector must be a table alias name",
+			"table level pattern matcher, unknown selector",
 		)
 	}
-	colOrRow := primary.Suffix[0]
+	ref := leading.(*sql.Ref)
+	var pattern *sql.Suffix
+	tidx := 0
+	sym := 0
 
-	if colOrRow.Ty != sql.SuffixDot &&
-		(colOrRow.Symbol != sql.SymbolColumns && colOrRow.Symbol != sql.SymbolRows) {
+	switch ref.Symbol {
+	case sql.SymbolColumns, sql.SymbolRows:
+		sym = ref.Symbol
+		if len(primary.Suffix) != 1 {
+			return self.p.err(
+				"resolve-symbol",
+				"table level pattern matcher, COLUMNS/ROWS invalid suffix expression",
+			)
+		}
+		pattern = primary.Suffix[0]
+		tidx = wildcardTableIndex
+		break
+
+	case sql.SymbolNone:
+		if len(primary.Suffix) == 2 {
+			colOrRow := primary.Suffix[0]
+			if colOrRow.Ty != sql.SuffixDot &&
+				(colOrRow.Symbol != sql.SymbolColumns && colOrRow.Symbol != sql.SymbolRows) {
+				return self.p.err(
+					"resolve-symbol",
+					"table level pattern matcher, ROWS/COLUMNS keyword must follow table selector",
+				)
+			}
+			sym = colOrRow.Symbol
+			pattern = primary.Suffix[1]
+			tableName := ref.Id
+			tableDesp := self.p.findTableDescriptorByAlias(tableName)
+			if tableDesp == nil {
+				return self.p.err("resolve-symbol", "unknown table: %s", tableName)
+			}
+			tidx = tableDesp.Index
+		} else {
+			return nil // just a function call
+		}
+		break
+
+	default:
 		return self.p.err(
 			"resolve-symbol",
-			"table level pattern matcher, ROWS/COLUMNS keyword must follow table selector",
+			"table level pattern matcher, unknown symbol",
 		)
 	}
 
-	pattern := primary.Suffix[1]
 	if pattern.Ty != sql.SuffixCall || len(pattern.Call.Parameters) != 1 {
 		return self.p.err(
 			"resolve-symbol",
@@ -136,14 +174,9 @@ func (self *visitorResolveSymbol) resolveSymbolExprSuffixTableMatcher(
 		)
 	}
 
-	tableName := leading.(*sql.Ref).Id
-	tableDesp := self.p.findTableDescriptorByAlias(tableName)
-	if tableDesp == nil {
-		return self.p.err("resolve-symbol", "unknown table: %s", tableName)
-	}
-
 	primary.CanName.SetMatcher(
-		tableDesp.Index, // index of the table
+		tidx,
+		sym,
 		pattern.Call.Parameters[0].(*sql.Const).String, // pattern
 	)
 	return nil
@@ -192,6 +225,13 @@ func (self *visitorResolveSymbol) AcceptPrimary(
 				return false, err
 			}
 			break
+		case sql.SuffixCall:
+			// check wildcard COLUMNS/ROWS special syntax
+			if err := self.resolveSymbolExprSuffixTableMatcher(primary); err != nil {
+				return false, err
+			}
+			break
+
 		default:
 			break
 		}

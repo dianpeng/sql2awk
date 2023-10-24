@@ -46,10 +46,8 @@ func aggTypeToName(i int) string {
 }
 
 const (
-	aggTableIndex = -1
-)
-
-const (
+	aggTableIndex       = -1
+	wildcardTableIndex  = -2
 	wildcardColumnIndex = math.MaxInt
 )
 
@@ -86,8 +84,10 @@ type TableDescriptor struct {
 }
 
 type TableScan struct {
-	Table  *TableDescriptor // which table to be scanned
-	Filter sql.Expr         // early filter, if none nil
+	Table     *TableDescriptor // which table to be scanned
+	RowFilter *TableMatcher    // must be a row filter or nil
+	ColFilter *TableMatcher    // nust be a column filter or nil
+	Filter    sql.Expr         // early filter, if none nil
 }
 
 type Join interface {
@@ -206,62 +206,71 @@ const (
 	OutputVarColMatch
 )
 
+type TableMatcher struct {
+	Match   int
+	Pattern string
+}
+
 type OutputVar struct {
 	Type    int              // type of the output var
 	Value   sql.Expr         // an expression
 	Table   *TableDescriptor // which table the wildcard is bounded
-	Pattern string           // used for pattern matching of ROWS/COLUMNS
+	Pattern string           // alias of the output var
 	Alias   string           // alias of the output var
 }
 
-type OutputVarList []OutputVar
+type OutputVarList []*OutputVar
 
 func (self *OutputVarList) addValue(
 	v sql.Expr,
 	a string,
-) {
-	*self = append(*self, OutputVar{
+) *OutputVar {
+	*self = append(*self, &OutputVar{
 		Type:  OutputVarValue,
 		Value: v,
 		Alias: a,
 	})
+	return (*self)[len(*self)-1]
 }
 
 func (self *OutputVarList) addWildcard(
 	t *TableDescriptor,
 	a string,
-) {
-	*self = append(*self, OutputVar{
+) *OutputVar {
+	*self = append(*self, &OutputVar{
 		Type:  OutputVarWildcard,
 		Table: t,
 		Alias: a,
 	})
+	return (*self)[len(*self)-1]
 }
 
 func (self *OutputVarList) addRowMatch(
 	t *TableDescriptor,
 	p string,
 	a string,
-) {
-	*self = append(*self, OutputVar{
+) *OutputVar {
+	*self = append(*self, &OutputVar{
 		Type:    OutputVarRowMatch,
 		Table:   t,
 		Pattern: p,
 		Alias:   a,
 	})
+	return (*self)[len(*self)-1]
 }
 
 func (self *OutputVarList) addColMatch(
 	t *TableDescriptor,
 	p string,
 	a string,
-) {
-	*self = append(*self, OutputVar{
+) *OutputVar {
+	*self = append(*self, &OutputVar{
 		Type:    OutputVarColMatch,
 		Table:   t,
 		Pattern: p,
 		Alias:   a,
 	})
+	return (*self)[len(*self)-1]
 }
 
 // Output phase, basically just print out everything. This is related to the
