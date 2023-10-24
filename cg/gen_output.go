@@ -253,13 +253,35 @@ if ($[g, output_count] >= %[limit]) {
 func (self *outputCodeGenNormal) genCalc(
 	output *plan.Output,
 ) {
-	for idx, expr := range output.VarList {
-		xx := self.cg.genExpr(expr)
-		self.writer.Assign(
-			self.writer.LocalN("output_val", idx),
-			fmt.Sprintf("(%s\"\")", xx),
-			nil,
-		)
+	for idx, ovar := range output.VarList {
+		if ovar.TableWildcard {
+			if output.Distinct {
+				// if we have distinct, we do the dumpping, otherwise do nothing here
+				// since we cannot save wildcard column for this table into local
+				// variables, it is a special case
+				self.writer.Chunk(
+					`
+%[output] = "";
+for ($[l, idx] = 1; $[l, idx] <= %[table_fnum]; ++$[l, idx]) {
+  %[output] = sprintf("%s%s", $[output], %[table][%[rid], $[l, idx]]);
+}
+`,
+					awkWriterCtx{
+						"output":     self.writer.LocalN("output_val", idx),
+						"table_fnum": self.cg.varTableField(ovar.Table.Index),
+						"table":      self.cg.varTable(ovar.Table.Index),
+						"rid":        self.writer.rid(ovar.Table.Index),
+					},
+				)
+			}
+		} else {
+			xx := self.cg.genExpr(ovar.Value)
+			self.writer.Assign(
+				self.writer.LocalN("output_val", idx),
+				fmt.Sprintf("(%s\"\")", xx),
+				nil,
+			)
+		}
 	}
 }
 
@@ -304,10 +326,46 @@ if ($[ga, distinct][$[l, distinct_key]] == "") {
 func (self *outputCodeGenNormal) genVarOutput(
 	output *plan.Output,
 ) error {
-	self.writer.Call(
-		"format_next",
-		self.outputLocalList(output),
-	)
+	if !output.HasTableWildcard() {
+		self.writer.Call(
+			"format_next",
+			self.outputLocalList(output),
+		)
+	} else {
+		self.writer.Line("$[l, cidx] = 0;", nil)
+
+		for idx, ovar := range output.VarList {
+			if ovar.TableWildcard {
+				self.writer.Chunk(
+					`
+for ($[l, idx] = 1; $[l, idx] <= %[table_fnum]; ++$[l, idx]) {
+  format_wildcard_print_column($[l, cidx], %[table][%[rid], $[l, idx]]);
+  $[l, cidx]++;
+}
+`,
+					awkWriterCtx{
+						"table_fnum": self.cg.varTableField(ovar.Table.Index),
+						"table":      self.cg.varTable(ovar.Table.Index),
+						"rid":        self.writer.rid(ovar.Table.Index),
+					},
+				)
+			} else {
+				self.writer.Line(
+					`format_wildcard_print_column($[l, cidx], %[tmp]);`,
+					awkWriterCtx{
+						"tmp": self.writer.LocalN("output_val", idx),
+					},
+				)
+				self.writer.Line("$[l, cidx]++;", nil)
+			}
+		}
+		self.writer.Line(
+			`printf("%[sep]\n");`,
+			awkWriterCtx{
+				"sep": self.cg.formatSep(),
+			},
+		)
+	}
 	return nil
 }
 
@@ -325,7 +383,6 @@ func (self *outputCodeGenNormal) genOutput(
 	if err := self.genVarOutput(output); err != nil {
 		return err
 	}
-	self.writer.Line("printf \"\\n\"", nil)
 	return nil
 }
 

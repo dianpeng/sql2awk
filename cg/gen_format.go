@@ -103,11 +103,11 @@ func (self *formatCodeGen) titleName(
 	idx int,
 	out *plan.Output,
 ) string {
-	alias := out.VarAlias[idx]
-	if alias == "" {
+	ovar := out.VarList[idx]
+	if ovar.Alias == "" {
 		return fmt.Sprintf("$%d", idx)
 	} else {
-		return alias
+		return ovar.Alias
 	}
 }
 
@@ -145,10 +145,6 @@ func (self *formatCodeGen) title() {
 	title := f.GetTitle()
 	sep := f.GetBorderString()
 
-	if title.Ignore {
-		return
-	}
-
 	content, del := self.titleFormat(
 		title,
 		self.cg.query.Output,
@@ -169,50 +165,63 @@ print("%[del]");
 }
 
 func (self *formatCodeGen) genPrologue() {
+	title := self.cg.query.Format.GetTitle()
+	if title.Ignore {
+		return
+	}
+
 	if self.cg.query.Output.Wildcard {
-		title := self.cg.query.Format.GetTitle()
-		if title.Ignore {
-			return
-		}
 		self.writer.Call(
 			"format_wildcard_title",
 			nil,
 		)
 	} else {
-		self.title()
+		if self.cg.query.Output.HasTableWildcard() {
+			self.writer.Call(
+				"format_mixed_wildcard_title",
+				nil,
+			)
+		} else {
+			self.title()
+		}
 	}
 }
 
 func (self *formatCodeGen) genEpilogue() {
+	title := self.cg.query.Format.GetTitle()
+	if title.Ignore {
+		return
+	}
+
 	if self.cg.query.Output.Wildcard {
-		title := self.cg.query.Format.GetTitle()
-		if title.Ignore {
-			return
-		}
 		self.writer.Call(
 			"format_wildcard_title_foot",
 			nil,
 		)
 	} else {
-		f := self.cg.query.Format
-		title := f.GetTitle()
-		sep := f.GetBorderString()
+		if self.cg.query.Output.HasTableWildcard() {
+			self.writer.Call(
+				"format_mixed_wildcard_title_foot",
+				nil,
+			)
+		} else {
+			f := self.cg.query.Format
+			title := f.GetTitle()
+			sep := f.GetBorderString()
 
-		if title.Ignore {
-			return
+			_, del := self.titleFormat(
+				title,
+				self.cg.query.Output,
+				sep,
+			)
+
+			self.writer.Line(
+				`print("%[del]");`,
+				awkWriterCtx{
+					"del": del,
+				},
+			)
 		}
-
-		_, del := self.titleFormat(
-			title,
-			self.cg.query.Output,
-			sep,
-		)
-		self.writer.Line(
-			`print("%[del]");`,
-			awkWriterCtx{
-				"del": del,
-			},
-		)
 	}
 }
 
@@ -423,6 +432,7 @@ func (self *formatCodeGen) genNext() error {
 			self.writer.o(self.columnFormat(f, idx, fmtStr))
 		}
 		self.writer.o(self.cg.formatSep())
+		self.writer.o("\\n")
 		self.writer.o("\",")
 
 		self.writer.o(self.writer.ridParamStrList(self.cg.outputSize()))
@@ -443,6 +453,7 @@ func (self *formatCodeGen) genDone() error {
 // Special builtin function for handling title and footbar of wildcard search
 // which we do not know the scheme before scanning them yet. Each table will
 // have 3 special global variables correspondingly
+//
 // 1) tbl#    : table itself, contains needed datitem
 // 2) tblsize#: table's row size, used for iteration purpose
 // 3) tblfnum#: table's column size, used for scanning field of each row
@@ -503,6 +514,71 @@ func generateWildcardTitleFoot(
 		"format_wildcard_title_foot",
 	)
 	writer.Line(`printf("%s\n", $[g, wildcard_title_bar_sep]);`, nil)
+	return writer.Flush(), f
+}
+
+func generateMixedWildcardTitle(
+	cg *queryCodeGen,
+) (string, *awkGlobalFromFunc) {
+	writer, f := newAwkWriter(
+		0,
+		"format_mixed_wildcard_title",
+	)
+	output := cg.query.Output
+	if !output.HasTableWildcard() {
+		return writer.Flush(), f
+	}
+
+	writer.Line("$[l, csize] = 0;", nil)
+
+	for idx, ovar := range output.VarList {
+		if ovar.TableWildcard {
+			writer.Line(`$[l, csize] += %[size];`,
+				awkWriterCtx{
+					"size": cg.varTableField(idx),
+				},
+			)
+		} else {
+			writer.Line("$[l, csize]++;", nil)
+		}
+	}
+
+	titleFmt := cg.query.Format.Title
+	titleBar := cg.query.Format.GetBorderString()
+
+	writer.Chunk(
+		`
+$[l, title]="";
+$[g, mixed_wildcard_title_bar_sep]="";
+for ($[l, i] = 0; $[l, i] < $[l, csize]; $[l, i]++) {
+  $[l, title] = sprintf("%s%[sep]%-%[padding]s", $[l, title], sprintf("$%d", $[l, i]));
+}
+
+for ($[l, i] = 0; $[l, i] < length($[l, title])+1; $[l, i]++) {
+  $[g, mixed_wildcard_title_bar_sep] = sprintf("%s-", $[g, mixed_wildcard_title_bar_sep]);
+}
+
+printf("%s\n", $[g, mixed_wildcard_title_bar_sep]);
+printf("%[fmt]%[sep]\n", $[l, title]);
+printf("%s\n", $[g, mixed_wildcard_title_bar_sep]);
+`,
+		awkWriterCtx{
+			"sep":     titleBar,
+			"padding": fmt.Sprintf("%d", cg.formatPaddingSize()),
+			"fmt":     stylish(titleFmt, "%s", false),
+		},
+	)
+	return writer.Flush(), f
+}
+
+func generateMixedWildcardTitleFoot(
+	cg *queryCodeGen,
+) (string, *awkGlobalFromFunc) {
+	writer, f := newAwkWriter(
+		0,
+		"format_mixed_wildcard_title_foot",
+	)
+	writer.Line(`printf("%s\n", $[g, mixed_wildcard_title_bar_sep]);`, nil)
 	return writer.Flush(), f
 }
 

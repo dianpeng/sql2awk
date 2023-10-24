@@ -83,7 +83,8 @@ const (
 )
 
 type Parser struct {
-	L *Lexer
+	L               *Lexer
+	allowSuffixStar bool // used during parsing projection var
 }
 
 func newParser(xx string) *Parser {
@@ -409,12 +410,15 @@ func (self *Parser) parseProjectionVar(idx int) (SelectVar, error) {
 	default:
 		var val Expr
 		alias := ""
+		self.allowSuffixStar = true
 
 		if e, err := self.parseExpr(); err != nil {
 			return nil, err
 		} else {
 			val = e
 		}
+
+		self.allowSuffixStar = false
 
 		if self.L.Token == TkAs {
 			if self.L.Next() != TkId {
@@ -1162,6 +1166,17 @@ func (self *Parser) parseSuffixDot() (*Suffix, error) {
 		id = self.L.Lexeme.Text
 		self.L.Next()
 		break
+
+	case TkMul:
+		if self.allowSuffixStar {
+			// allow t.* syntax to be specified
+			id = "*"
+			self.L.Next()
+		} else {
+			return nil, self.err("invalid * here, must be projection")
+		}
+		break
+
 	default:
 		return nil, self.err("expect a identifier after '.' operator")
 	}

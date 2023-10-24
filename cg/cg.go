@@ -377,6 +377,18 @@ func (self *queryCodeGen) genFormatBuiltin() string {
 		buf.WriteString(c)
 	}
 
+	{
+		c, f := generateMixedWildcardTitle(self)
+		self.g.addG(f)
+		buf.WriteString(c)
+	}
+
+	{
+		c, f := generateMixedWildcardTitleFoot(self)
+		self.g.addG(f)
+		buf.WriteString(c)
+	}
+
 	return buf.String()
 }
 

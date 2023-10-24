@@ -195,15 +195,31 @@ type Sort struct {
 	VarList []sql.Expr // list of variable needs to be sorted, *same* as Output
 }
 
+type OutputVar struct {
+	Value         sql.Expr         // an expression
+	TableWildcard bool             // a table wildcard
+	Table         *TableDescriptor // which table
+	Alias         string           // alias of the output var
+}
+
 // Output phase, basically just print out everything. This is related to the
 // selected vars
 type Output struct {
-	VarList  []sql.Expr
-	VarAlias []string // alias of projection, empty means no alias
-	VarSize  int      // size of variable that will be output, considering wildcard
-	Wildcard bool     // whether select * shows up
-	Limit    int64    // maximum allowed entries output
-	Distinct bool     // whether perform distinct operation for the output
+	VarList []OutputVar // output variable list
+
+	VarSize  int   // size of variable that will be output, considering wildcard
+	Wildcard bool  // whether select * shows up
+	Limit    int64 // maximum allowed entries output
+	Distinct bool  // whether perform distinct operation for the output
+}
+
+func (self *Output) HasTableWildcard() bool {
+	for _, x := range self.VarList {
+		if x.TableWildcard {
+			return true
+		}
+	}
+	return false
 }
 
 // ----------------------------------------------------------------------------
@@ -379,13 +395,18 @@ func (self *Plan) totalTableColumnSize() int {
 	return cnt
 }
 
+const wildcardColumnIndex = math.MaxInt
+
 // parse a column index into its corresponding index value. Each column index
 // must be in format as $#, # represent the number, and the number should be
 // positive and less than the config.MaxColumnSize
 func (self *Plan) codx(c string) int {
 	if len(c) == 0 {
 		return -1
+	} else if c == "*" {
+		return wildcardColumnIndex
 	}
+
 	r, _ := utf8.DecodeRuneInString(c)
 	if r != '$' {
 		return -1 // unknown prefix

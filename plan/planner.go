@@ -127,6 +127,22 @@ func (self *Plan) planHaving(s *sql.Select) {
 // plan output
 // output is lies inside of the SelectVar, just use select var will be fine,
 // ie perform some expression operation
+
+func (self *Plan) isTableWildcard(
+	col *sql.Col,
+) *TableDescriptor {
+	v := col.Value
+	if v.Type() == sql.ExprPrimary {
+		primary := v.(*sql.Primary)
+		if primary.CanName.IsTableColumn() &&
+			primary.CanName.ColumnIndex == wildcardColumnIndex {
+			// just table index is valid, okay it is a wildcard
+			return self.tableList[primary.CanName.TableIndex]
+		}
+	}
+	return nil
+}
+
 func (self *Plan) planOutput(s *sql.Select) {
 	// 1) projection part, needs to take care of
 
@@ -138,8 +154,20 @@ func (self *Plan) planOutput(s *sql.Select) {
 		switch x.Type() {
 		case sql.SelectVarCol:
 			col := x.(*sql.Col)
-			self.Output.VarList = append(self.Output.VarList, col.Value)
-			self.Output.VarAlias = append(self.Output.VarAlias, col.Alias())
+
+			// check whether the column expression represent an table wildcard or not
+			if tb := self.isTableWildcard(col); tb != nil {
+				self.Output.VarList = append(self.Output.VarList, OutputVar{
+					TableWildcard: true,
+					Table:         tb,
+					Alias:         col.Alias(),
+				})
+			} else {
+				self.Output.VarList = append(self.Output.VarList, OutputVar{
+					Value: col.Value,
+					Alias: col.Alias(),
+				})
+			}
 			break
 
 		case sql.SelectVarStar:

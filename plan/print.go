@@ -123,8 +123,18 @@ func (self *Plan) printOutput(
 	buf.WriteString(fmt.Sprintf("Limit: %d\n", output.Limit))
 	buf.WriteString(fmt.Sprintf("Distinct: %v\n", output.Distinct))
 
-	for idx, expr := range output.VarList {
-		buf.WriteString(fmt.Sprintf("Var[%d]: %s\n", idx, sql.PrintExpr(expr)))
+	for idx, ovar := range output.VarList {
+		if ovar.TableWildcard {
+			buf.WriteString(
+				fmt.Sprintf(
+					"Var[%d]: %s\n",
+					idx,
+					fmt.Sprintf("tbl[%d].*", ovar.Table.Index),
+				),
+			)
+		} else {
+			buf.WriteString(fmt.Sprintf("Var[%d]: %s\n", idx, sql.PrintExpr(ovar.Value)))
+		}
 	}
 
 }

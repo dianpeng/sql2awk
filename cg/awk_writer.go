@@ -49,7 +49,9 @@ type awkWriter struct {
 }
 
 func (self *awkGlobal) addG(g *awkGlobalFromFunc) {
-	self.G = append(self.G, g)
+	if g != nil {
+		self.G = append(self.G, g)
+	}
 }
 
 func (self *awkGlobal) globalList() []awkG {
