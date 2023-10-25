@@ -231,10 +231,32 @@ func (self *earlyFilterAnalyzer) prune() sql.Expr {
 type visitorEarlyFilterResetCanName struct {
 }
 
+func (self *visitorEarlyFilterResetCanName) setName(
+	cn *sql.CanName,
+	id string,
+	cidx int,
+) {
+	switch cidx {
+	case 0:
+		cn.SetName("$0")
+		break
+	case ColumnIndexNF:
+		cn.SetName("NF")
+		break
+	default:
+		cn.SetName(id)
+		break
+	}
+}
+
 func (self *visitorEarlyFilterResetCanName) AcceptRef(
 	ref *sql.Ref,
 ) (bool, error) {
-	ref.CanName.SetName(ref.Id)
+	if ref.CanName.IsTableColumn() {
+		self.setName(&ref.CanName, ref.Id, ref.CanName.ColumnIndex)
+	} else {
+		ref.CanName.SetName(ref.Id)
+	}
 	return true, nil
 }
 
@@ -242,7 +264,11 @@ func (self *visitorEarlyFilterResetCanName) AcceptPrimary(
 	primary *sql.Primary,
 ) (bool, error) {
 	if primary.CanName.IsTableColumn() {
-		primary.CanName.SetName(primary.Suffix[0].Component)
+		self.setName(
+			&primary.CanName,
+			primary.Suffix[0].Component,
+			primary.CanName.ColumnIndex,
+		)
 	}
 	return true, nil
 }

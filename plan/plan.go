@@ -48,7 +48,10 @@ func aggTypeToName(i int) string {
 const (
 	aggTableIndex       = -1
 	wildcardTableIndex  = -2
-	wildcardColumnIndex = math.MaxInt
+	WildcardColumnIndex = math.MaxInt
+
+	// Special column index, CodeGen will need to take care of it internally
+	ColumnIndexNF = math.MaxInt - 1
 )
 
 type Options []interface{}
@@ -502,11 +505,22 @@ func (self *Plan) codx(c string) int {
 	if r != '$' {
 		return -1 // unknown prefix
 	}
-	v, err := strconv.Atoi(c[1:])
+
+	param := c[1:]
+	switch param {
+	case "line":
+		return 0
+	case "FN", "fn":
+		return ColumnIndexNF
+	default:
+		break
+	}
+
+	v, err := strconv.Atoi(param)
 	if err != nil {
 		return -1
 	}
-	if v >= self.Config.MaxColumnSize {
+	if v < 0 || v >= self.Config.MaxColumnSize {
 		return -1
 	}
 	return v

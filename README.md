@@ -26,8 +26,6 @@ traditional linux command line tools to form your own anlytical tools.
   - Distinct
   - Limit
   - No schema is needed
-    - User will need to use AWK style column indexer to reference specific column
-    - The column index starts from 1
   - Star/Wildcard matching
   - Like/Regex/Pattern
     - like/not like operator are supported
@@ -67,6 +65,12 @@ traditional linux command line tools to form your own anlytical tools.
       - ``` select * from csv("sample1.txt") ```
       - ``` select * from csv("sample1.txt", ",", 1, 200) ```
         - selecting a every fields via CSV syntax separated by ",", starting from line 1 until line 200
+
+- Scheme
+  - No scheme is needed, use $N to reference the N'th field
+  - $1 represents first field, $2 second, ...
+  - $0 represents the full line
+  - $FN represents the field count after parsing
 
 - Builtin Functions
   - Type

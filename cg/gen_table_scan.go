@@ -208,9 +208,14 @@ row_idx = %[table_size];
 if (%[table_field] < field_count_tt) {
   %[table_field] = field_count_tt;
 }
-for (i = 1; i <= field_count_tt; i++) {
+
+# make sure include special field index (0), ie the fullline
+for (i = 0; i <= field_count_tt; i++) {
   %[table][row_idx, i] = $i;
 }
+
+# special field to contain column size, if needed for the future
+%[table][row_idx, "$"] = NF;
 next;
 `,
 			awkWriterCtx{

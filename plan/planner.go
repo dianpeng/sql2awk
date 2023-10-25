@@ -136,7 +136,7 @@ func (self *Plan) isTableWildcard(
 		primary := v.(*sql.Primary)
 
 		if primary.CanName.IsTableColumn() &&
-			primary.CanName.ColumnIndex == wildcardColumnIndex {
+			primary.CanName.ColumnIndex == WildcardColumnIndex {
 			// just table index is valid, okay it is a wildcard
 			return self.tableList[primary.CanName.TableIndex]
 		}
@@ -220,7 +220,7 @@ func (self *Plan) planOutput(s *sql.Select) {
 					}
 				} else if primary.CanName.IsTableColumn() {
 					tidx := primary.CanName.TableIndex
-					if primary.CanName.ColumnIndex == wildcardColumnIndex {
+					if primary.CanName.ColumnIndex == WildcardColumnIndex {
 						self.Output.VarList.addWildcard(
 							self.tableList[tidx],
 							col.Alias(),

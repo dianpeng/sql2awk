@@ -33,7 +33,7 @@ func (self *visitorResolveSymbol) resolveSymbolExprSuffix(
 		break
 
 	case sql.SymbolStar:
-		colIdx = wildcardColumnIndex
+		colIdx = WildcardColumnIndex
 		tableDesp.SetFullColumn(self.p.Config.MaxColumnSize)
 		break
 

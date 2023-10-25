@@ -2,6 +2,7 @@ package cg
 
 import (
 	"fmt"
+	"github.com/dianpeng/sql2awk/plan"
 	"github.com/dianpeng/sql2awk/sql"
 	"strings"
 )
@@ -53,12 +54,24 @@ func (self *exprCodeGen) genCanNameIndexOrRef(
 
 	case sql.CanNameTableColumn:
 		if canName.TableIndex >= 0 {
+			cidx := canName.ColumnIndex
+			cidxStr := ""
+
+			switch cidx {
+			case plan.ColumnIndexNF:
+				cidxStr = "\"$\""
+				break
+
+			default:
+				cidxStr = fmt.Sprintf("%d", cidx)
+				break
+			}
 			self.o.WriteString(
 				fmt.Sprintf(
-					"%s[%s, %d]",
+					"%s[%s, %s]",
 					self.cg.varTable(canName.TableIndex),
 					self.rid(canName.TableIndex),
-					canName.ColumnIndex,
+					cidxStr,
 				),
 			)
 		} else if canName.TableIndex == aggTableIndex {
