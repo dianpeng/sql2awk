@@ -838,6 +838,30 @@ func doPrintExprBinary(b *Binary, buf *bytes.Buffer, ind int) {
 	case TkOr:
 		buf.WriteString("||")
 		break
+	case TkMatch:
+		buf.WriteString(" match ")
+		break
+	case TkNotMatch:
+		buf.WriteString(" not match ")
+		break
+	case TkLike:
+		buf.WriteString(" like ")
+		break
+	case TkNotLike:
+		buf.WriteString(" not like ")
+		break
+	case TkIn:
+		buf.WriteString(" in ")
+		break
+	case TkBetween:
+		buf.WriteString(" between ")
+		break
+	case tkNotIn:
+		buf.WriteString(" not in ")
+		break
+	case tkNotBetween:
+		buf.WriteString(" not between ")
+		break
 	default:
 		panic("unreachable")
 		break

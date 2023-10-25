@@ -29,6 +29,11 @@ traditional linux command line tools to form your own anlytical tools.
     - User will need to use AWK style column indexer to reference specific column
     - The column index starts from 1
   - Star/Wildcard matching
+  - Like/Regex/Pattern
+    - like/not like operator are supported
+      - By translating them into regexp
+    - match/not match operator are supported
+      - Powered by AWK/GAWK's regex
 
 - Just AWK/GAWK code
   - No other runtime tools/library/binary is needed for execution

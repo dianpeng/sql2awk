@@ -226,50 +226,73 @@ func (self *exprCodeGen) genBinary(
 ) {
 	self.o.WriteString("(")
 	self.genExpr(binary.L)
+
 	switch binary.Op {
 	case sql.TkAdd:
-		self.o.WriteString("+")
+		self.o.WriteString(" + ")
 		break
 	case sql.TkSub:
-		self.o.WriteString("-")
+		self.o.WriteString(" - ")
 		break
 	case sql.TkMul:
-		self.o.WriteString("*")
+		self.o.WriteString(" * ")
 		break
 	case sql.TkDiv:
-		self.o.WriteString("/")
+		self.o.WriteString(" / ")
 		break
 	case sql.TkMod:
-		self.o.WriteString("%")
+		self.o.WriteString(" % ")
 		break
 	case sql.TkAnd:
-		self.o.WriteString("&&")
+		self.o.WriteString(" && ")
 		break
 	case sql.TkOr:
-		self.o.WriteString("||")
+		self.o.WriteString(" || ")
 		break
 	case sql.TkLt:
-		self.o.WriteString("<")
+		self.o.WriteString(" < ")
 		break
 	case sql.TkLe:
-		self.o.WriteString("<=")
+		self.o.WriteString(" <= ")
 		break
 	case sql.TkGt:
-		self.o.WriteString(">")
+		self.o.WriteString(" > ")
 		break
 	case sql.TkGe:
-		self.o.WriteString(">=")
+		self.o.WriteString(" >= ")
 		break
 	case sql.TkEq:
-		self.o.WriteString("==")
+		self.o.WriteString(" == ")
 		break
 	case sql.TkNe:
-		self.o.WriteString("!=")
+		self.o.WriteString(" != ")
 		break
+	case sql.TkMatch:
+		self.o.WriteString(" ~ ")
+		break
+	case sql.TkNotMatch:
+		self.o.WriteString(" !~ ")
+		break
+
+	case sql.TkLike:
+		self.o.WriteString(" ~ ")
+		self.o.WriteString("like2r(")
+		self.genExpr(binary.R)
+		self.o.WriteString("))")
+		return
+
+	case sql.TkNotLike:
+		self.o.WriteString(" !~ ")
+		self.o.WriteString("like2r(")
+		self.genExpr(binary.R)
+		self.o.WriteString("))")
+		return
+
 	default:
 		panic("unknown binary operator")
 		break
 	}
+
 	self.genExpr(binary.R)
 	self.o.WriteString(")")
 }

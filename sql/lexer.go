@@ -49,6 +49,8 @@ const (
 	TkNext
 	TkRows
 	TkColumns
+	TkMatch
+	TkLike
 
 	// Punctuation
 	TkComma
@@ -87,10 +89,17 @@ const (
 	TkError
 	TkEof
 
+	// --------------------------------------------------------------------------
+	// Tokens that will not be emitted by the lexer directly
+	//
 	// Special hidden tokens that will never showsup during lexing, used inside
 	// of parser for preprocessing/desugar purpose
 	tkNotBetween
 	tkNotIn
+
+	// internally resolved by parser, will not show up
+	TkNotMatch
+	TkNotLike
 )
 
 type Lexeme struct {
@@ -560,6 +569,9 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 		if self.matchKeyword("imit") {
 			return true, self.yield(TkLimit, 6)
 		}
+		if self.matchKeyword("ike") {
+			return true, self.yield(TkLike, 4)
+		}
 		break
 
 	case 'n', 'N':
@@ -576,6 +588,12 @@ func (self *Lexer) tryKeyword(c rune) (bool, int) {
 		// always put at very last
 		if self.matchKeyword("ot") {
 			return true, self.yield(TkNot, 3)
+		}
+		break
+
+	case 'm', 'M':
+		if self.matchKeyword("atch") {
+			return true, self.yield(TkMatch, 5)
 		}
 		break
 
@@ -690,6 +708,14 @@ func (self *Lexer) Next() int {
 	}
 
 	return self.next()
+}
+
+func (self *Lexer) Peek() (int, Lexeme) {
+	dupL := *self
+	v := self.Next()
+	lexeme := self.Lexeme // duplicates
+	*self = dupL
+	return v, lexeme
 }
 
 func (self *Lexer) next() int {

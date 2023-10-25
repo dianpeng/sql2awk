@@ -118,6 +118,68 @@ function asorti_rev(input, out, tmp_out, local_l, i) {
   return local_l;
 }
 
+function ltrim(s, copy) {
+	copy = s;
+	sub(/^[ \t\r\n]+/, "", copy);
+	return copy;
+}
+
+function rtrim(s, copy) {
+	copy = s;
+	sub(/[ \t\r\n]+$/, "", copy);
+	return copy; 
+}
+
+function trim(s)  { return rtrim(ltrim(s)); }
+
+function startswith(s, b) { return index(s, b) == 1; }
+function endswith(s, b) { return index(s, b) == length(s) - length(b); }
+
+# ------------------------------------------------------------------------
+# SQL like operator supports:
+#  ie we just translate the like expression into regex and use awk regex
+#  handle the operation internally
+# ------------------------------------------------------------------------
+function like2r(v, i, l, c, nc0, nc1, nc2, o) {
+  l = length(v);
+  o = "^";
+
+  for (i = 1; i <= l; i++) {
+    c = substr(v, i, 1);
+    if (c == "%") {
+      if (i + 3 <= l) {
+        nc0 = substr(v, i+1, 1);
+        nc1 = substr(v, i+2, 1);
+        nc2 = substr(v, i+3, 1);
+        if (nc0 == "[" && nc2 == "]") {
+          if (nc1 == "[") {
+            o = o "\\[";
+          } else if (nc1 == "]") {
+            o = o "\\]";
+          } else {
+            o = o "[" c "]";
+          }
+        }
+        i += 3;
+        continue;
+      }
+
+      o = o ".*";
+    } else if (c == "_") {
+      o = o ".";
+    } else if (c == "[") {
+      o = o "\\[";
+    } else if (c == "]") {
+      o = o "\\]";
+    } else {
+      o = o "[" c "]";
+    }
+  }
+
+  o = o "$";
+  return o;
+}
+
 # ------------------------------------------------------------------------
 # Workarounds
 # ------------------------------------------------------------------------
@@ -144,13 +206,26 @@ function sql2awk_is_string(v) { return is_string(v); }
 function sql2awk_is_empty(v) { return is_empty(v); }
 function sql2awk_type(v) { return type(v); }
 function sql2awk_cast(v, ty) { return cast(v, ty); }
+function sql2awk_defval(v, defv) {
+  if (is_empty(v)) {
+    return defv;
+  } else {
+    return v;
+  }
+}
+function sql2awk_if_empty(a, b) { return sql2awk_defval(a, b); }
 
 function sql2awk_string_length(v) { return length(v); }
 function sql2awk_string_to_lower(v) { return tolower(v); }
 function sql2awk_string_to_upper(v) { return toupper(v); }
 function sql2awk_string_substr(a, b, c) { return substr(a, b, c); }
-function sql2awk_string_index(a, b) { return index(a, b); }
+function sql2awk_string_index(a, b) { return index(a, b) - 1; }
 function sql2awk_string_include(a, b) { return index(a, b) != 0; }
+function sql2awk_string_ltrim(a) { return ltrim(a); }
+function sql2awk_string_rtrim(a) { return rtrim(a); }
+function sql2awk_string_trim(a) { return trim(a); }
+function sql2awk_string_startswith(a, b) { return startswith(a, b); }
+function sql2awk_string_endswith(a, b) { return endswith(a, b); }
 
 function sql2awk_math_cos(a) { return cos(a); }
 function sql2awk_math_sin(a) { return sin(a); }
@@ -162,16 +237,6 @@ function sql2awk_math_atan2(a, b) { return atan2(a, b); }
 
 function sql2awk_base64_decode(a) { return base64_decode(a); }
 function sql2awk_base64_encode(a) { return base64_encode(a); }
-
-
-function sql2awk_defval(v, defv) {
-  if (is_empty(v)) {
-    return defv;
-  } else {
-    return v;
-  }
-}
-function sql2awk_if_empty(a, b) { return sql2awk_defval(a, b); }
 
 function sql2awk_regexp_is_match(a, b) {
   return match(a, b) != 0;

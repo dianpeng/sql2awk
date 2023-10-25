@@ -835,11 +835,11 @@ func (self *Parser) binPrec(tk int) int {
 		return 0
 	case TkAnd:
 		return 1
-	case TkIn, TkBetween, TkNot:
+	case TkIn, TkBetween, tkNotIn, tkNotBetween, TkNot:
 		return 2
 	case TkEq, TkNe:
 		return 3
-	case TkLt, TkLe, TkGt, TkGe:
+	case TkLt, TkLe, TkGt, TkGe, TkMatch, TkNotMatch, TkLike, TkNotLike:
 		return 4
 	case TkAdd, TkSub:
 		return 5
@@ -928,33 +928,46 @@ func (self *Parser) doParseBinRest(lhs Expr,
 
 	for {
 		tk := self.L.Token
-		nextPrec := self.binPrec(tk)
-
-		if nextPrec == invalidOpPrec {
-			break
-		} else if nextPrec < prec {
-			break
-		}
-
-		ntk := self.L.Next() // eat the operator token
+		ntk, _ := self.L.Peek() // eat the operator token
+		pop2 := false
 
 		if tk == TkNot {
 			switch ntk {
 			case TkIn:
 				tk = tkNotIn
-				self.L.Next()
 				break
 
 			case TkBetween:
 				tk = tkNotBetween
-				self.L.Next()
 				break
+
+			case TkMatch:
+				tk = TkNotMatch
+				break
+
+			case TkLike:
+				tk = TkNotLike
+				break
+
 			default:
 				return nil, self.err(
 					"NOT operator shows up, but expect a suffix operator, " +
 						"example like NOT IN, NOT BETWEEN etcd ... ",
 				)
 			}
+			pop2 = true
+		}
+
+		nextPrec := self.binPrec(tk)
+		if nextPrec == invalidOpPrec {
+			break
+		} else if nextPrec < prec {
+			break
+		}
+
+		self.L.Next()
+		if pop2 {
+			self.L.Next()
 		}
 
 		var newNode Expr
