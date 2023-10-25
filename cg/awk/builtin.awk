@@ -132,8 +132,8 @@ function rtrim(s, copy) {
 
 function trim(s)  { return rtrim(ltrim(s)); }
 
-function startswith(s, b) { return index(s, b) == 1; }
-function endswith(s, b) { return index(s, b) == length(s) - length(b); }
+function starts_with(s, b) { return index(s, b) == 1; }
+function ends_with(s, b) { return index(s, b) == length(s) - length(b); }
 
 # ------------------------------------------------------------------------
 # SQL like operator supports:
@@ -224,8 +224,9 @@ function sql2awk_string_include(a, b) { return index(a, b) != 0; }
 function sql2awk_string_ltrim(a) { return ltrim(a); }
 function sql2awk_string_rtrim(a) { return rtrim(a); }
 function sql2awk_string_trim(a) { return trim(a); }
-function sql2awk_string_startswith(a, b) { return startswith(a, b); }
-function sql2awk_string_endswith(a, b) { return endswith(a, b); }
+function sql2awk_string_starts_with(a, b) { return starts_with(a, b); }
+function sql2awk_string_ends_with(a, b) { return ends_with(a, b); }
+function sql2awk_string_like(a, b) { return a ~ like2r(b); }
 
 function sql2awk_math_cos(a) { return cos(a); }
 function sql2awk_math_sin(a) { return sin(a); }
