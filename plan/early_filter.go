@@ -243,6 +243,9 @@ func (self *visitorEarlyFilterResetCanName) setName(
 	case ColumnIndexNF:
 		cn.SetName("NF")
 		break
+	case ColumnIndexRowNum:
+		cn.SetName("rownum")
+		break
 	default:
 		cn.SetName(id)
 		break

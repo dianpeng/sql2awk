@@ -183,8 +183,8 @@ NF = $[l, mod_idx] - 1;
 
 		self.writer.Chunk(
 			`
-row_idx = %[table_size];
 %[table_size]++;
+rownum = %[table_size];
 `,
 			awkWriterCtx{
 				"table":      x.Table,
@@ -211,11 +211,12 @@ if (%[table_field] < field_count_tt) {
 
 # make sure include special field index (0), ie the fullline
 for (i = 0; i <= field_count_tt; i++) {
-  %[table][row_idx, i] = $i;
+  %[table][rownum-1, i] = $i;
 }
 
 # special field to contain column size, if needed for the future
-%[table][row_idx, "$"] = NF;
+%[table][rownum-1, "$"] = NF;
+%[table][rownum-1, "rownum"] = rownum;
 next;
 `,
 			awkWriterCtx{

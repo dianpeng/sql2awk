@@ -81,5 +81,5 @@ function base64_decode(str,    out, c1,c2,c3,c4, i1,i2,i3,i4, u, v1,v2,v3) {
 # called by the embedder during global setup
 function base64_setup(i) {
   base64_b64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-	for (i=0; i<256; i++) base64_ord[sprintf("%c",i)] = i;
+  for (i=0; i<256; i++) base64_ord[sprintf("%c",i)] = i;
 }

@@ -1,7 +1,6 @@
 package cg
 
 import (
-	"fmt"
 	"github.com/dianpeng/sql2awk/plan"
 	_ "strings"
 )
@@ -281,7 +280,7 @@ for ($[l, idx] = 1; $[l, idx] <= %[table_fnum]; ++$[l, idx]) {
 			xx := self.cg.genExpr(ovar.Value)
 			self.writer.Assign(
 				self.writer.LocalN("output_val", idx),
-				fmt.Sprintf("(%s\"\")", xx),
+				xx,
 				nil,
 			)
 			break

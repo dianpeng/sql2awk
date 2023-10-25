@@ -51,7 +51,8 @@ const (
 	WildcardColumnIndex = math.MaxInt
 
 	// Special column index, CodeGen will need to take care of it internally
-	ColumnIndexNF = math.MaxInt - 1
+	ColumnIndexNF     = math.MaxInt - 1
+	ColumnIndexRowNum = math.MaxInt - 2
 )
 
 type Options []interface{}
@@ -493,6 +494,19 @@ func (self *Plan) setAllTableFullColumn() {
 	}
 }
 
+func (self *Plan) wellknowncodx(n string) int {
+	switch n {
+	case "line":
+		return 0
+	case "FN", "fn":
+		return ColumnIndexNF
+	case "ROWNUM", "rownum":
+		return ColumnIndexRowNum
+	default:
+		return -1
+	}
+}
+
 // parse a column index into its corresponding index value. Each column index
 // must be in format as $#, # represent the number, and the number should be
 // positive and less than the config.MaxColumnSize
@@ -501,19 +515,18 @@ func (self *Plan) codx(c string) int {
 		return -1
 	}
 
+	if x := self.wellknowncodx(c); x >= 0 {
+		return x
+	}
+
 	r, _ := utf8.DecodeRuneInString(c)
 	if r != '$' {
 		return -1 // unknown prefix
 	}
 
 	param := c[1:]
-	switch param {
-	case "line":
-		return 0
-	case "FN", "fn":
-		return ColumnIndexNF
-	default:
-		break
+	if x := self.wellknowncodx(param); x >= 0 {
+		return x
 	}
 
 	v, err := strconv.Atoi(param)

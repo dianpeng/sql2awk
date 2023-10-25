@@ -25,7 +25,6 @@ traditional linux command line tools to form your own anlytical tools.
     - Notes, to support this feature, the generated code will have to use GAWK function *asort/asorti*
   - Distinct
   - Limit
-  - No schema is needed
   - Star/Wildcard matching
   - Like/Regex/Pattern
     - like/not like operator are supported
@@ -72,6 +71,7 @@ traditional linux command line tools to form your own anlytical tools.
   - $1 represents first field, $2 second, ...
   - $0 represents the full line
   - $FN represents the field count after parsing
+  - rownum/$rownum represents row's number/index, starting from 1
 
 - Builtin Functions
   - Type

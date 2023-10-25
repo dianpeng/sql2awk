@@ -435,7 +435,7 @@ func (self *formatCodeGen) genNext() error {
 		self.writer.o("\\n")
 		self.writer.o("\",")
 
-		self.writer.o(self.writer.ridParamStrList(self.cg.outputSize()))
+		self.writer.o(self.writer.ridParamList(self.cg.outputSize()))
 		self.writer.o(";")
 		self.writer.oLB()
 	}

@@ -384,6 +384,9 @@ func (self *cookbook) genAwk() error {
 			}
 		}
 	}
+	if p := self.parsed.getOne("print"); p != nil {
+		print(self.code, "\n")
+	}
 	return nil
 }
 
@@ -610,6 +613,8 @@ func (self *cookbook) verify() error {
 func TestCodeGen(t *testing.T) {
 	assert := assert.New(t)
 	dirList := []string{TEST_DIR}
+	tt := 0
+	ttErr := 0
 
 	for len(dirList) > 0 {
 		dir := dirList[0]
@@ -629,13 +634,24 @@ func TestCodeGen(t *testing.T) {
 				cb := &cookbook{
 					filename: path,
 				}
+				tt++
 				if err := cb.run(); err != nil {
 					print(fmt.Sprintf("cookbook(%s) failed: %s\n", path, err))
 					assert.True(false)
+					ttErr++
 				} else {
 					print(fmt.Sprintf("cookbook(%s) passed\n", path))
 				}
 			}
 		}
 	}
+
+	t.Log(
+		fmt.Sprintf(
+			"total(%d), err(%d), ratio(%f)",
+			tt,
+			ttErr,
+			float64(tt-ttErr)/float64(tt),
+		),
+	)
 }

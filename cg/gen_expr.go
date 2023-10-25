@@ -62,6 +62,10 @@ func (self *exprCodeGen) genCanNameIndexOrRef(
 				cidxStr = "\"$\""
 				break
 
+			case plan.ColumnIndexRowNum:
+				cidxStr = "\"rownum\""
+				break
+
 			default:
 				cidxStr = fmt.Sprintf("%d", cidx)
 				break
