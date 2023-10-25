@@ -61,6 +61,7 @@ traditional linux command line tools to form your own anlytical tools.
       - ``` select * from tab("sample1.txt", ":", 1, 200) ```
         - selecting a every fields separated by ":", starting from line 1 until line 200
 
+  - CSV
     - Using csv/xsv type inside of *from* clause indicates that the file is parsed as csv file, this will *correctly* handle quoted string, but it is not performant
       - ``` select * from csv("sample1.txt") ```
       - ``` select * from csv("sample1.txt", ",", 1, 200) ```
@@ -116,10 +117,8 @@ traditional linux command line tools to form your own anlytical tools.
     - AWK/GAWK can only support numerical type and string type
     - NULL is missing
 
-  - CSV is not support properly
-    - Currently due to limitation of AWK/GAWK, it cannot support CSV/TSV
-    - Other approach is to convert CSV into tabular data and handle it inside of awk
-    - We will have pure AWK implementation for CSV/JSON parsing, but not performant
+  - CSV is not performant
+    - The support of CSV is not performant. The CSV parser is written in AWK and it will have to scan each character inside of the line to parse the quoted string etc ...
 
 # Example
 
