@@ -464,6 +464,9 @@ func (self *queryCodeGen) Gen() (string, error) {
 # -----------------------------------------------------------------
 BEGIN {
 %s
+
+# other builtins
+base64_setup();
 }
 
 # -----------------------------------------------------------------
@@ -531,7 +534,7 @@ END {
 		output,
 		format,
 		formatBuiltin,
-		builtinAWK,
+		builtin(),
 		builtinMisc,
 	), nil
 }

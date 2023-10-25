@@ -27,7 +27,7 @@ traditional linux command line tools to form your own anlytical tools.
   - Limit
   - No schema is needed
     - User will need to use AWK style column indexer to reference specific column
-    - The column index starts from 0, instead of 1, eg ```$1, $2, ...```
+    - The column index starts from 1
   - Star/Wildcard matching
 
 - Just AWK/GAWK code
@@ -50,6 +50,56 @@ traditional linux command line tools to form your own anlytical tools.
 
   - Format
     - Allow fine grained format of the output in terminal. Like color the output for better visibility
+
+- File Format
+  - Tab/Tabular
+    - Using tab/tabular type inside of *from* clause indicates that the file is parsed as delimter separated file, by default it just uses space delimited file
+      - ``` select * from tab("sample1.txt") ```
+      - ``` select * from tab("sample1.txt", ":", 1, 200) ```
+        - selecting a every fields separated by ":", starting from line 1 until line 200
+
+    - Using csv/xsv type inside of *from* clause indicates that the file is parsed as csv file, this will *correctly* handle quoted string, but it is not performant
+      - ``` select * from csv("sample1.txt") ```
+      - ``` select * from csv("sample1.txt", ",", 1, 200) ```
+        - selecting a every fields via CSV syntax separated by ",", starting from line 1 until line 200
+
+- Builtin Functions
+  - Type
+    - is_decimal
+    - is_integer
+    - is_string
+    - is_empty
+    - type
+    - cast
+
+  - String
+    - string_length
+    - string_to_lower
+    - string_to_upper
+    - string_substr
+    - string_index
+    - string_include
+    - string_format
+      - sprintf
+  - Math
+    - math_cos
+    - math_sin
+    - math_sqrt
+    - math_exp
+    - math_int
+    - math_log
+    - math_atan2
+
+  - Bit
+    - bit_and
+    - bit_or
+    - bit_not
+    - bit_lshift
+    - bit_rshift
+
+  - Base64
+    - base64_decode
+    - base64_encode
 
 # Caveats
 

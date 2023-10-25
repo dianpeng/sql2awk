@@ -111,7 +111,28 @@ func (self *exprCodeGen) functionName(
 		primary.Suffix[0].Ty == sql.SuffixCall {
 		name := primary.Leading.(*sql.Ref)
 		if name.CanName.IsFree() || name.CanName.IsName() {
-			return fmt.Sprintf("sql2awk_%s", name.Id)
+			// for special functions, we do not translate into sql2awk_XXX but just
+			// translate to builtin AWK builtins, since certain builtin allow any
+			// number of parameters
+			switch name.Id {
+			case "string_format":
+				return "sprintf"
+			// bit operators
+			case "bit_and":
+				return "and"
+			case "bit_or":
+				return "or"
+			case "bit_xor":
+				return "xor"
+			case "bit_not":
+				return "compl"
+			case "bit_lshift":
+				return "lshift"
+			case "bit_rshift":
+				return "rshift"
+			default:
+				return fmt.Sprintf("sql2awk_%s", name.Id)
+			}
 		}
 	}
 	return ""

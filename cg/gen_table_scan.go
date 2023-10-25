@@ -16,17 +16,16 @@ type tableScanGen struct {
 	Ref    []tableScanGenRef
 }
 
-func (self *tableScanGen) genOneTab(
+func (self *tableScanGen) gencommontab(
+	fs string,
+	start int,
+	end int,
 	ts *plan.TableScan,
 ) error {
 	filter := ""
 	if ts.Filter != nil {
 		filter = self.cg.genExpr(ts.Filter)
 	}
-
-	fs := ts.Table.Params.AsStr(0, "")
-	start := ts.Table.Params.AsInt(1, -1)
-	end := ts.Table.Params.AsInt(2, -1)
 	table := ts.Table
 
 	x := tableScanGenRef{
@@ -35,38 +34,15 @@ func (self *tableScanGen) genOneTab(
 		Size:  self.cg.varTableSize(table.Index),
 	}
 
-	self.writer.If(
-		`FILENAME=="%[filename]"`,
-		awkWriterCtx{
-			"filename": ts.Table.Path,
-		},
-	)
-
 	// scanning filter code
 	{
-		if fs != "" {
-			self.writer.Chunk(
-				`
-    # workaround the issue with FS setting dynamically with awk. Additionally
-    # workaround the split with regexp issue, notes the regexp is static
-    if (FNR <= 1) {
-      # always the first line have the issue, we will *NOT* use NF, but
-      # use manual split hera, notes the FS will be treated as static regexp
-      # whose type will not touch the split function implementation bug, which
-      # not always use regexp search :(
-      __workaround_sep_n = split($0, __workaround_sep, /%[fs]/);
-      NF = __workaround_sep_n;
-      for (__workaround_i = 1; __workaround_i <= NF; __workaround_i++) {
-        $__workaround_i = __workaround_sep[__workaround_i];
-      }
-    }
-    FS="%[fs]";
-  `,
-				awkWriterCtx{
-					"fs": fs,
-				},
-			)
-		}
+
+		self.writer.Line(
+			`FS = "%[fs]";`,
+			awkWriterCtx{
+				"fs": fs,
+			},
+		)
 
 		if start > 0 {
 			self.writer.Line(
@@ -246,8 +222,77 @@ next;
 	}
 
 	self.Ref = append(self.Ref, x)
-	self.writer.IfEnd()
 	return nil
+}
+
+func (self *tableScanGen) genTableTab(
+	ts *plan.TableScan,
+) error {
+	fs := ts.Table.Params.AsStr(0, " ")
+	start := ts.Table.Params.AsInt(1, -1)
+	end := ts.Table.Params.AsInt(2, -1)
+	self.writer.If(
+		`FILENAME=="%[filename]"`,
+		awkWriterCtx{
+			"filename": ts.Table.Path,
+		},
+	)
+	defer func() {
+		self.writer.IfEnd()
+	}()
+
+	self.writer.Chunk(
+		`
+if (FNR == 1) {
+  # always the first line have the issue, we will *NOT* use NF, but
+  # use manual split hera, notes the FS will be treated as static regexp
+  # whose type will not touch the split function implementation bug, which
+  # not always use regexp search :(
+  reparse_tab($0, "%[fs]");
+}
+`,
+		awkWriterCtx{
+			"fs": fs,
+		},
+	)
+
+	return self.gencommontab(fs, start, end, ts)
+}
+
+func (self *tableScanGen) genTableXSV(
+	ts *plan.TableScan,
+) error {
+	delim := ts.Table.Params.AsStr(0, ",")
+	start := ts.Table.Params.AsInt(1, -1)
+	end := ts.Table.Params.AsInt(2, -1)
+
+	self.writer.If(
+		`FILENAME=="%[filename]"`,
+		awkWriterCtx{
+			"filename": ts.Table.Path,
+		},
+	)
+
+	defer func() {
+		self.writer.IfEnd()
+	}()
+
+	// before entering into the code, we need to *parse the line* as CSV
+	self.writer.Chunk(
+		`
+# TODO(dpeng): add broken CSV record handling customization here
+$[l, csv_len] = xsv_parse_line($0, 1, "%[delim]", $[l, csv_out]);
+for ($[l, csv_i] = 1; $[l, csv_i] <= $[l, csv_len]; $[l, csv_i]++) {
+  $$[l, csv_i] = $[l, csv_out][$[l, csv_i]];
+}
+FR = $[l, csv_len];
+`,
+		awkWriterCtx{
+			"delim": delim,
+		},
+	)
+
+	return self.gencommontab("", start, end, ts)
 }
 
 func (self *tableScanGen) gen(
@@ -256,7 +301,12 @@ func (self *tableScanGen) gen(
 	for _, ts := range p.TableScan {
 		switch ts.Table.Type {
 		case "tab", "Tab":
-			if err := self.genOneTab(ts); err != nil {
+			if err := self.genTableTab(ts); err != nil {
+				return err
+			}
+			break
+		case "csv", "xsv":
+			if err := self.genTableXSV(ts); err != nil {
 				return err
 			}
 			break

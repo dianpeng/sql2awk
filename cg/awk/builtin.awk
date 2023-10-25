@@ -119,6 +119,18 @@ function asorti_rev(input, out, tmp_out, local_l, i) {
 }
 
 # ------------------------------------------------------------------------
+# Workarounds
+# ------------------------------------------------------------------------
+function reparse_tab(line, fs, i, sep, sep_n) {
+  sep_n = split(line, sep, fs);
+  NF = sep_n;
+  for (i = 1; i <= sep_n; i++) {
+    $i = sep[i];
+  }
+  return sep_n;
+}
+
+# ------------------------------------------------------------------------
 #
 # Notes, the following function can be used by user's SQL
 #   The sql analyzer will rewrite any possible function call into prefixed
@@ -133,10 +145,12 @@ function sql2awk_is_empty(v) { return is_empty(v); }
 function sql2awk_type(v) { return type(v); }
 function sql2awk_cast(v, ty) { return cast(v, ty); }
 
-function sql2awk_length(v) { return length(v); }
-function sql2awk_to_lower(v) { return tolower(v); }
-function sql2awk_to_upper(v) { return toupper(v); }
-function sql2awk_substr(a, b, c) { return substr(a, b, c); }
+function sql2awk_string_length(v) { return length(v); }
+function sql2awk_string_to_lower(v) { return tolower(v); }
+function sql2awk_string_to_upper(v) { return toupper(v); }
+function sql2awk_string_substr(a, b, c) { return substr(a, b, c); }
+function sql2awk_string_index(a, b) { return index(a, b); }
+function sql2awk_string_include(a, b) { return index(a, b) != 0; }
 
 function sql2awk_math_cos(a) { return cos(a); }
 function sql2awk_math_sin(a) { return sin(a); }
@@ -145,6 +159,10 @@ function sql2awk_math_exp(a) { return exp(a); }
 function sql2awk_math_int(a) { return int(a); }
 function sql2awk_math_log(a) { return log(a); }
 function sql2awk_math_atan2(a, b) { return atan2(a, b); }
+
+function sql2awk_base64_decode(a) { return base64_decode(a); }
+function sql2awk_base64_encode(a) { return base64_encode(a); }
+
 
 function sql2awk_defval(v, defv) {
   if (is_empty(v)) {

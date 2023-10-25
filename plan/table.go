@@ -5,6 +5,19 @@ import (
 	"github.com/dianpeng/sql2awk/sql"
 )
 
+func supportTab(
+	name string,
+) bool {
+	switch name {
+	case "tab", "tabular":
+		return true // tabular data, default
+	case "csv", "xsv":
+		return true // comma separated data, not default, slow, but works :(
+	default:
+		return false
+	}
+}
+
 // Try to resolve the symbol inside of the expression tree and generate some
 // correct representation of the SQL tree. Part of the plan
 
@@ -15,9 +28,10 @@ func (self *Plan) genTableDescriptor(
 	if len(fromVar.Vars) == 0 || fromVar.Vars[0].Ty != sql.ConstStr {
 		return nil, self.err("scan-table", "table path must be specified")
 	}
-	if fromVar.Name != "tab" && fromVar.Name != "tabular" {
-		return nil, self.err("scan-table", "unknown table type")
+	if !supportTab(fromVar.Name) {
+		return nil, self.err("scan-table", "unsupported table type")
 	}
+
 	rewrite, err := self.rewrite(fromVar.Rewrite)
 	if err != nil {
 		return nil, err

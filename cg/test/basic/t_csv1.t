@@ -1,18 +1,16 @@
 @![table]
 @!name:/tmp/t1.txt
 @@@@@@@@@@@@@@
-helloworld xxx
-yyy zzz
+1, "A BC", abcdefg,Holala
 @================
 
 @![sql]
 @@@@@@@@@@@@@@@@@@
-select string_to_upper($1)
-from tab("/tmp/t1.txt")
+select $2
+from csv("/tmp/t1.txt")
 @==================
 
 @![result]
 @@@@@@@@@@@@@@
-HELLOWORLD
-YYY
+A BC
 @===================
