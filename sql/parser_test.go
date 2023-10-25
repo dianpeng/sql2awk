@@ -297,15 +297,14 @@ func TestExprUnary(t *testing.T) {
 		assert.True(ref.Id == "a")
 	}
 	{
-		p := newParser("--a")
+		p := newParser("-a")
 		p.L.Next()
 		v, err := p.parseExpr()
 		assert.True(err == nil)
 		assert.True(v.Type() == ExprUnary)
 		u := v.(*Unary)
-		assert.True(len(u.Op) == 2)
+		assert.True(len(u.Op) == 1)
 		assert.True(u.Op[0] == TkSub)
-		assert.True(u.Op[1] == TkSub)
 
 		assert.True(u.Operand.Type() == ExprRef)
 		ref := u.Operand.(*Ref)

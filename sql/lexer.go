@@ -742,7 +742,15 @@ func (self *Lexer) next() int {
 		case '+':
 			return self.yield(TkAdd, 1)
 		case '-':
-			return self.yield(TkSub, 1)
+			if self.nextRune2() == '-' {
+				if !self.lexLineComment() {
+					self.Cursor++
+					return self.Token
+				}
+				break
+			} else {
+				return self.yield(TkSub, 1)
+			}
 		case '*':
 			return self.yield(TkMul, 1)
 		case '/':
